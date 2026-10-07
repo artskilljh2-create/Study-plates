@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>스터디필라테스 스케줄러</title>
+    <!-- iOS PWA 웹앱 설정 -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="스터디필라테스">
+    <style>
+        * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { margin: 0; padding: 0; background-color: #f2f2f7; color: #1c1c1e; }
+        .header { background: #ffffff; padding: 16px; border-bottom: 1px solid #e5e5ea; text-align: center; font-weight: bold; font-size: 18px; }
+        .nav-tabs { display: flex; background: #ffffff; border-bottom: 1px solid #e5e5ea; }
+        .tab-btn { flex: 1; padding: 12px; border: none; background: none; font-size: 15px; font-weight: 600; color: #8e8e93; cursor: pointer; }
+        .tab-btn.active { color: #007aff; border-bottom: 2px solid #007aff; }
+        .container { padding: 16px; max-width: 600px; margin: 0 auto; }
+        .card { background: #ffffff; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        .date-picker { width: 100%; padding: 10px; font-size: 16px; border: 1px solid #c7c7cc; border-radius: 8px; margin-bottom: 16px; }
+        .btn { background: #007aff; color: white; border: none; padding: 10px 16px; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%; font-size: 15px; }
+        .btn-sm { width: auto; padding: 6px 12px; font-size: 13px; }
+        .badge { display: inline-block; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; }
+        .badge-scheduled { background: #e5f1ff; color: #007aff; }
+        .badge-attended { background: #e4f7e8; color: #34c759; }
+        .badge-absent { background: #ffe5e5; color: #ff3b30; }
+        .badge-postponed { background: #fff3e5; color: #ff9500; }
+        .form-group { margin-bottom: 14px; }
+        .form-group label { display: block; font-size: 13px; color: #6c6c70; margin-bottom: 4px; }
+        .form-group input, .form-group select { width: 100%; padding: 10px; border: 1px solid #c7c7cc; border-radius: 8px; font-size: 15px; }
+        .days-selector { display: flex; gap: 6px; }
+        .day-btn { flex: 1; padding: 8px 0; border: 1px solid #c7c7cc; border-radius: 6px; background: #f2f2f7; text-align: center; font-size: 13px; cursor: pointer; }
+        .day-btn.selected { background: #007aff; color: white; border-color: #007aff; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="header">스터디필라테스 원장님 스케줄러</div>
+<div class="nav-tabs">
+    <button class="tab-btn active" onclick="switchTab('schedule')">📅 오늘 스케줄</button>
+    <button class="tab-btn" onclick="switchTab('members')">👤 회원 관리 & 스케줄 자동생성</button>
+</div>
+
+<div class="container">
+    <!-- 스케줄 탭 -->
+    <div id="tab-schedule">
+        <input type="date" id="schedule-date" class="date-picker" onchange="renderSchedule()">
+        <div id="schedule-list"></div>
+    </div>
+
+    <!-- 회원 관리 탭 -->
+    <div id="tab-members" style="display: none;">
+        <div class="card">
+            <h3>신규 회원 & 고정 스케줄 20회 생성</h3>
+            <div class="form-group">
+                <label>회원 이름</label>
+                <input type="text" id="m-name" placeholder="예: 김필라">
+            </div>
+            <div class="form-group">
+                <label>등록 횟수</label>
+                <input type="number" id="m-credits" value="20">
+            </div>
+            <div class="form-group">
+                <label>시작 일자</label>
+                <input type="date" id="m-startdate">
+            </div>
+            <div class="form-group">
+                <label>고정 요일 선택</label>
+                <div class="days-selector">
+                    <div class="day-btn" onclick="toggleDay(this, 1)">월</div>
+                    <div class="day-btn selected" onclick="toggleDay(this, 2)">화</div>
+                    <div class="day-btn" onclick="toggleDay(this, 3)">수</div>
+                    <div class="day-btn selected" onclick="toggleDay(this, 4)">목</div>
+                    <div class="day-btn" onclick="toggleDay(this, 5)">금</div>
+                    <div class="day-btn" onclick="toggleDay(this, 6)">토</div>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>수업 시간</label>
+                <select id="m-hour">
+                    <option value="9">오전 09:00</option>
+                    <option value="10" selected>오전 10:00</option>
+                    <option value="11">오전 11:00</option>
+                    <option value="14">오후 02:00</option>
+                    <option value="19">오후 07:00</option>
+                </select>
+            </div>
+            <button class="btn" onclick="addMemberAndAutoSchedules()">20회 스케줄 자동 연쇄 생성</button>
+        </div>
+
+        <div id="member-list"></div>
+    </div>
+</div>
+
+<script>
+    // 초기 샘플 데이터
+    let members = JSON.parse(localStorage.getItem('pilates_members')) || [
+        { id: '1', name: '김필라', total: 20, remaining: 20 }
+    ];
+    let lessons = JSON.parse(localStorage.getItem('pilates_lessons')) || [];
+
+    let selectedDays = [2, 4]; // 기본: 화(2), 목(4)
+
+    document.getElementById('schedule-date').valueAsDate = new Date();
+    document.getElementById('m-startdate').valueAsDate = new Date();
+
+    function saveData() {
+        localStorage.setItem('pilates_members', JSON.stringify(members));
+        localStorage.setItem('pilates_lessons', JSON.stringify(lessons));
+    }
+
+    function switchTab(tab) {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        if(tab === 'schedule') {
+            document.querySelectorAll('.tab-btn')[0].classList.add('active');
+            document.getElementById('tab-schedule').style.display = 'block';
+            document.getElementById('tab-members').style.display = 'none';
+            renderSchedule();
+        } else {
+            document.querySelectorAll('.tab-btn')[1].classList.add('active');
+            document.getElementById('tab-schedule').style.display = 'none';
+            document.getElementById('tab-members').style.display = 'block';
+            renderMembers();
+        }
+    }
+
+    function toggleDay(el, dayIndex) {
+        el.classList.toggle('selected');
+        if(selectedDays.includes(dayIndex)) {
+            selectedDays = selectedDays.filter(d => d !== dayIndex);
+        } else {
+            selectedDays.push(dayIndex);
+        }
+    }
+
+    function addMemberAndAutoSchedules() {
+        const name = document.getElementById('m-name').value.trim();
+        const credits = parseInt(document.getElementById('m-credits').value);
+        const startDateVal = document.getElementById('m-startdate').value;
+        const hour = parseInt(document.getElementById('m-hour').value);
+
+        if(!name || !startDateVal || selectedDays.length === 0) {
+            alert('회원 이름과 시작일자, 요일을 확인해 주세요.');
+            return;
+        }
+
+        const memberId = Date.now().toString();
+        const newMember = { id: memberId, name: name, total: credits, remaining: credits };
+        members.push(newMember);
+
+        let currentDate = new Date(startDateVal);
+        let createdCount = 0;
+
+        while(createdCount < credits) {
+            let day = currentDate.getDay(); // 0:일, 1:월, 2:화...
+            if(selectedDays.includes(day)) {
+                lessons.push({
+                    id: Date.now() + Math.random().toString(),
+                    memberId: memberId,
+                    memberName: name,
+                    dateStr: currentDate.toISOString().split('T')[0],
+                    hour: hour,
+                    status: '수업예정'
+                });
+                createdCount++;
+            }
+            currentDate.setDate(currentDate.getDate() + 1);
+        }
+
+        saveData();
+        alert(`${name} 회원님의 ${credits}회 화목 스케줄이 자동 생성되었습니다!`);
+        document.getElementById('m-name').value = '';
+        switchTab('schedule');
+    }
+
+    function renderSchedule() {
+        const selectedDateStr = document.getElementById('schedule-date').value;
+        const listDiv = document.getElementById('schedule-list');
+        listDiv.innerHTML = '';
+
+        const todaysLessons = lessons.filter(l => l.dateStr === selectedDateStr);
+
+        if(todaysLessons.length === 0) {
+            listDiv.innerHTML = '<p style="text-align:center; color:#8e8e93; padding:20px;">예정된 수업이 없습니다.</p>';
+            return;
+        }
+
+        todaysLessons.forEach(lesson => {
+            const member = members.find(m => m.id === lesson.memberId);
+            const remaining = member ? member.remaining : 0;
+            const total = member ? member.total : 0;
+
+            let badgeClass = 'badge-scheduled';
+            if(lesson.status === '출석') badgeClass = 'badge-attended';
+            if(lesson.status === '결석') badgeClass = 'badge-absent';
+            if(lesson.status === '수업 넘기기') badgeClass = 'badge-postponed';
+
+            listDiv.innerHTML += `
+                <div class="card">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <h4>${lesson.hour}:00 - ${lesson.memberName} 회원님</h4>
+                        <span class="badge ${badgeClass}">${lesson.status}</span>
+                    </div>
+                    <p style="font-size:13px; color:#6c6c70; margin: 4px 0 12px 0;">잔여 횟수: ${remaining}회 / ${total}회</p>
+                    <div style="display:flex; gap:6px;">
+                        <button class="btn btn-sm" style="background:#34c759" onclick="updateStatus('${lesson.id}', '출석')">🟢 출석(1회차감)</button>
+                        <button class="btn btn-sm" style="background:#ff9500" onclick="updateStatus('${lesson.id}', '수업 넘기기')">🟠 수업 넘기기</button>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    function updateStatus(lessonId, newStatus) {
+        const lesson = lessons.find(l => l.id === lessonId);
+        if(!lesson) return;
+
+        const oldStatus = lesson.status;
+        if(oldStatus === newStatus) return;
+
+        lesson.status = newStatus;
+        const member = members.find(m => m.id === lesson.memberId);
+
+        if(newStatus === '출석' && oldStatus !== '출석') {
+            if(member && member.remaining > 0) member.remaining--;
+        }
+
+        if(newStatus === '수업 넘기기') {
+            if(oldStatus === '출석' && member) member.remaining++;
+            // 7일 뒤 날짜에 레슨 1회 자동 연장 생성
+            let d = new Date(lesson.dateStr);
+            d.setDate(d.getDate() + 7);
+            lessons.push({
+                id: Date.now() + Math.random().toString(),
+                memberId: lesson.memberId,
+                memberName: lesson.memberName,
+                dateStr: d.toISOString().split('T')[0],
+                hour: lesson.hour,
+                status: '수업예정'
+            });
+            alert('수업이 횟수 차감 없이 다음 주로 1회 자동 연기 및 생성되었습니다.');
+        }
+
+        saveData();
+        renderSchedule();
+    }
+
+    function renderMembers() {
+        const div = document.getElementById('member-list');
+        div.innerHTML = '<h3>등록 회원 목록</h3>';
+        members.forEach(m => {
+            div.innerHTML += `
+                <div class="card" style="display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <strong>${m.name} 회원님</strong>
+                        <div style="font-size:13px; color:#6c6c70;">잔여 횟수: ${m.remaining}회 / 총 ${m.total}회</div>
+                    </div>
+                    <button class="btn btn-sm" onclick="recharge('${m.id}')">+10회 충전</button>
+                </div>
+            `;
+        });
+    }
+
+    function recharge(memberId) {
+        const member = members.find(m => m.id === memberId);
+        if(member) {
+            member.total += 10;
+            member.remaining += 10;
+            saveData();
+            renderMembers();
+        }
+    }
+
+    renderSchedule();
+</script>
+</body>
+</html>
