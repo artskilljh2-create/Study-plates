@@ -13,12 +13,10 @@
         body { margin: 0; padding: 0; background-color: #f2f2f7; color: #1c1c1e; padding-bottom: 30px; }
         .header { background: #ffffff; padding: 16px; border-bottom: 1px solid #e5e5ea; text-align: center; font-weight: bold; font-size: 18px; color: #2c3e50; }
         
-        /* 메인 탭 (3개 분리) */
         .nav-tabs { display: flex; background: #ffffff; border-bottom: 1px solid #e5e5ea; position: sticky; top: 0; z-index: 100; }
-        .tab-btn { flex: 1; padding: 12px 4px; border: none; background: none; font-size: 13px; font-weight: 600; color: #8e8e93; cursor: pointer; text-align: center; }
+        .tab-btn { flex: 1; padding: 12px 4px; border: none; background: none; font-size: 12px; font-weight: 600; color: #8e8e93; cursor: pointer; text-align: center; }
         .tab-btn.active { color: #007aff; border-bottom: 2px solid #007aff; }
 
-        /* 일/주/월 보기 서브 탭 */
         .view-modes { display: flex; gap: 6px; margin-bottom: 14px; background: #e5e5ea; padding: 4px; border-radius: 8px; }
         .view-btn { flex: 1; padding: 6px; border: none; background: none; border-radius: 6px; font-size: 13px; font-weight: 600; color: #6c6c70; cursor: pointer; text-align: center; }
         .view-btn.active { background: #ffffff; color: #000000; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
@@ -30,6 +28,7 @@
         .btn-danger { background: #ff3b30; }
         .btn-success { background: #34c759; }
         .btn-warning { background: #ff9500; }
+        .btn-secondary { background: #8e8e93; }
         .btn-sm { width: auto; padding: 6px 10px; font-size: 12px; }
         
         .badge { display: inline-block; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; }
@@ -47,7 +46,6 @@
         .day-btn { flex: 1; padding: 8px 0; border: 1px solid #c7c7cc; border-radius: 6px; background: #f2f2f7; text-align: center; font-size: 13px; cursor: pointer; }
         .day-btn.selected { background: #007aff; color: white; border-color: #007aff; font-weight: bold; }
 
-        /* 월달력 스타일 */
         .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; }
         .cal-header { font-size: 12px; font-weight: bold; color: #8e8e93; padding: 6px 0; }
         .cal-day { min-height: 55px; background: #f9f9fb; border-radius: 6px; padding: 4px; font-size: 12px; border: 1px solid #e5e5ea; cursor: pointer; }
@@ -62,11 +60,11 @@
 
 <div class="header">스터디필라테스 원장님 스케줄러</div>
 
-<!-- 메인 탭 3개로 분리 -->
 <div class="nav-tabs">
     <button class="tab-btn active" onclick="switchTab('schedule')">📅 스케줄 보기</button>
     <button class="tab-btn" onclick="switchTab('members')">👤 회원 관리</button>
-    <button class="tab-btn" onclick="switchTab('auto-schedule')">⚡ 스케줄 자동생성</button>
+    <button class="tab-btn" onclick="switchTab('auto-schedule')">⚡ 스케줄 생성</button>
+    <button class="tab-btn" onclick="switchTab('backup')">💾 백업/복원</button>
 </div>
 
 <div class="container">
@@ -165,14 +163,35 @@
             <button class="btn btn-success" onclick="generateAutoSchedules()">고정 스케줄 연쇄 생성하기</button>
         </div>
     </div>
+
+    <!-- 4. 백업 및 복원 탭 -->
+    <div id="tab-backup" style="display: none;">
+        <div class="card">
+            <h3>📥 데이터 파일로 백업받기</h3>
+            <p style="font-size:13px; color:#6c6c70; line-height:1.5;">
+                현재 등록된 모든 회원 목록과 스케줄 데이터를 파일로 다운로드합니다. 일주일에 한 번씩 아이폰의 <b>'파일' 앱이나 카카오톡 나에게 보내기</b>로 저장해두시면 안전합니다.
+            </p>
+            <button class="btn" onclick="exportData()">데이터 백업 파일 다운로드 (.json)</button>
+        </div>
+
+        <div class="card">
+            <h3>📤 데이터 파일 불러오기 (복원)</h3>
+            <p style="font-size:13px; color:#6c6c70; line-height:1.5;">
+                아이폰을 변경하셨거나 앱이 삭제된 경우, 기존에 저장해둔 백업 파일(.json)을 선택하여 이전 데이터를 즉시 불러옵니다.
+            </p>
+            <div class="form-group">
+                <input type="file" id="import-file" accept=".json">
+            </div>
+            <button class="btn btn-warning" onclick="importData()">선택한 파일로 데이터 복원하기</button>
+        </div>
+    </div>
 </div>
 
 <script>
-    // 기본 회원 데이터 초기화 (김필라 제거 완료 - 빈 배열)
     let members = JSON.parse(localStorage.getItem('pilates_members')) || [];
     let lessons = JSON.parse(localStorage.getItem('pilates_lessons')) || [];
 
-    let selectedDays = [2, 4]; // 기본: 화(2), 목(4)
+    let selectedDays = [2, 4];
     let currentViewMode = 'day';
 
     document.getElementById('schedule-date').valueAsDate = new Date();
@@ -188,6 +207,7 @@
         document.getElementById('tab-schedule').style.display = 'none';
         document.getElementById('tab-members').style.display = 'none';
         document.getElementById('tab-auto-schedule').style.display = 'none';
+        document.getElementById('tab-backup').style.display = 'none';
 
         if(tab === 'schedule') {
             document.querySelectorAll('.tab-btn')[0].classList.add('active');
@@ -201,6 +221,9 @@
             document.querySelectorAll('.tab-btn')[2].classList.add('active');
             document.getElementById('tab-auto-schedule').style.display = 'block';
             populateMemberDropdown();
+        } else if(tab === 'backup') {
+            document.querySelectorAll('.tab-btn')[3].classList.add('active');
+            document.getElementById('tab-backup').style.display = 'block';
         }
     }
 
@@ -223,7 +246,58 @@
         }
     }
 
-    // 1. 신규 회원 등록
+    // 데이터 백업 기능
+    function exportData() {
+        const data = {
+            members: members,
+            lessons: lessons,
+            exportDate: new Date().toLocaleString()
+        };
+        const jsonStr = JSON.stringify(data, null, 2);
+        const blob = new Blob([jsonStr], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `studypilates_backup_${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    // 데이터 복원 기능
+    function importData() {
+        const fileInput = document.getElementById('import-file');
+        const file = fileInput.files[0];
+        
+        if (!file) {
+            alert("복원할 백업 파일(.json)을 먼저 선택해 주세요.");
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const data = JSON.parse(e.target.result);
+                if (data.members && data.lessons) {
+                    if (confirm("기존 데이터에 파일의 데이터를 덮어씌우시겠습니까?")) {
+                        members = data.members;
+                        lessons = data.lessons;
+                        saveData();
+                        alert("데이터가 성공적으로 복원되었습니다!");
+                        switchTab('schedule');
+                    }
+                } else {
+                    alert("올바른 백업 파일 형식이 아닙니다.");
+                }
+            } catch (err) {
+                alert("파일을 읽는 중 오류가 발생했습니다.");
+            }
+        };
+        reader.readAsText(file);
+    }
+
     function addNewMember() {
         const name = document.getElementById('m-name').value.trim();
         const phone = document.getElementById('m-phone').value.trim();
@@ -244,7 +318,7 @@
             remaining: credits,
             teacher: teacher || '원장님',
             note: note || '특이사항 없음',
-            absentCount: 0 // 결석/당일취소 트래킹
+            absentCount: 0
         };
 
         members.push(newMember);
@@ -258,7 +332,6 @@
         switchTab('members');
     }
 
-    // 2. 회원 삭제
     function deleteMember(memberId) {
         const member = members.find(m => m.id === memberId);
         if(!member) return;
@@ -271,13 +344,12 @@
         }
     }
 
-    // 3. 회원 목록 및 드롭다운 연동
     function renderMembers() {
         const div = document.getElementById('member-list');
         div.innerHTML = '<h3>Registered Members (' + members.length + '명)</h3>';
 
         if(members.length === 0) {
-            div.innerHTML += '<p style="text-align:center; color:#8e8e93; padding:20px;">등록된 회원이 없습니다. 위 양식에서 추가해주세요.</p>';
+            div.innerHTML += '<p style="text-align:center; color:#8e8e93; padding:20px;">등록된 회원이 없습니다.</p>';
             return;
         }
 
@@ -318,7 +390,6 @@
         }
     }
 
-    // 4. 스케줄 연쇄 자동 생성
     function generateAutoSchedules() {
         const memberId = document.getElementById('auto-member-select').value;
         const count = parseInt(document.getElementById('auto-count').value);
@@ -335,8 +406,6 @@
 
         let currentDate = new Date(startDateVal);
         let createdCount = 0;
-
-        // 회원의 기존 생성된 수업 횟수를 계산하여 차수 구하기
         let existingLessonsCount = lessons.filter(l => l.memberId === memberId).length;
 
         while(createdCount < count) {
@@ -351,7 +420,7 @@
                     hour: hour,
                     status: '수업예정',
                     equipment: equipment,
-                    lessonIndex: existingLessonsCount // 몇 번째 수업인지 차수 표시
+                    lessonIndex: existingLessonsCount
                 });
                 createdCount++;
             }
@@ -363,7 +432,6 @@
         switchTab('schedule');
     }
 
-    // 5. 스케줄 렌더링
     function renderSchedule() {
         const selectedDateStr = document.getElementById('schedule-date').value;
         const listDiv = document.getElementById('schedule-list');
@@ -505,7 +573,6 @@
         return div;
     }
 
-    // 6. 출석 / 당일취소 / 넘기기 처리 로직
     function updateStatus(lessonId, newStatus) {
         const lesson = lessons.find(l => l.id === lessonId);
         if(!lesson) return;
@@ -516,7 +583,6 @@
         lesson.status = newStatus;
         const member = members.find(m => m.id === lesson.memberId);
 
-        // 출석 또는 당일취소 처리시 1회 차감
         if((newStatus === '출석' || newStatus === '결석(차감)') && (oldStatus === '수업예정' || oldStatus === '수업 넘기기')) {
             if(member && member.remaining > 0) {
                 member.remaining--;
@@ -526,7 +592,6 @@
             }
         }
 
-        // 수업 넘기기 (연기) 처리시 미차감 및 7일 뒤 스케줄 자동 연장
         if(newStatus === '수업 넘기기') {
             if((oldStatus === '출석' || oldStatus === '결석(차감)') && member) {
                 member.remaining++;
