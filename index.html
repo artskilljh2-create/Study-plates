@@ -74,6 +74,15 @@
         .lesson-delete-btn { color: #8e8e93; cursor: pointer; font-size: 12px; border: 1px solid #e5e5ea; padding: 2px 6px; border-radius: 4px; margin-left: 4px; }
         .lesson-delete-btn:hover { color: #ff3b30; border-color: #ff3b30; }
 
+        .member-actions { display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; }
+        .member-actions .btn { flex:1; min-width:120px; }
+        .btn-teal { background:#0a8f8f; }
+        .btn-indigo { background:#5856d6; }
+        .fixed-member-lessons { margin-top:10px; padding:10px; background:#f8f9fa; border-radius:8px; }
+        .fixed-member-lesson-row { display:flex; justify-content:space-between; align-items:center; padding:7px 0; border-bottom:1px solid #e5e5ea; font-size:12px; }
+        .fixed-member-lesson-row:last-child { border-bottom:none; }
+        .sync-summary { font-size:12px; color:#6c6c70; background:#f8f9fa; border-radius:8px; padding:10px; margin-bottom:10px; line-height:1.5; }
+
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); z-index: 1000; justify-content: center; align-items: center; }
         .modal-content { background: #fff; width: 90%; max-width: 450px; border-radius: 16px; padding: 20px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
         .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid #e5e5ea; padding-bottom: 10px; }
@@ -219,11 +228,15 @@
         <div class="card">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                 <h3 style="margin:0;">📋 회원 고정 스케줄 내역</h3>
-                <button class="btn btn-warning btn-sm" onclick="syncAndRefreshSchedules()">🔄 스케줄 재적용 & 동기화</button>
+                <div style="display:flex; gap:6px;">
+                    <button class="btn btn-indigo btn-sm" onclick="syncFixedRulesFromLessons()">📋 현재 스케줄에서 불러오기</button>
+                    <button class="btn btn-warning btn-sm" onclick="syncAndRefreshSchedules()">🔄 전체 동기화</button>
+                </div>
             </div>
             <p style="font-size:12px; color:#6c6c70; margin-top:0; margin-bottom:12px;">
-                카드를 터치(클릭)하면 <b>고정 요일/시간 상세 수정 모달</b>로 이동합니다.
+                <b>현재 등록된 고정 수업을 회원별로 확인</b>하고, 카드를 클릭하면 고정 요일/시간을 수정할 수 있습니다.
             </p>
+            <div id="fixed-sync-summary" class="sync-summary">현재 저장된 고정 스케줄 정보를 불러오는 중입니다.</div>
             <div id="fixed-schedule-list"></div>
         </div>
     </div>
@@ -362,6 +375,39 @@
     </div>
 </div>
 
+<!-- 이용권 횟수 추가 모달 -->
+<div id="add-credits-modal" class="modal-overlay">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="add-credits-title">➕ 이용권 횟수 추가</h3>
+            <button class="close-btn" onclick="closeAddCreditsModal()">✕</button>
+        </div>
+
+        <input type="hidden" id="add-credits-member-id">
+
+        <div class="form-group">
+            <label>추가할 횟수</label>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;">
+                <button class="btn btn-sm btn-secondary" onclick="setCreditAmount(8)">+8회</button>
+                <button class="btn btn-sm btn-secondary" onclick="setCreditAmount(10)">+10회</button>
+                <button class="btn btn-sm btn-secondary" onclick="setCreditAmount(20)">+20회</button>
+            </div>
+            <input type="number" id="add-credits-amount" min="1" step="1" placeholder="직접 입력 (예: 12)">
+        </div>
+
+        <div class="form-group">
+            <label>메모 (선택)</label>
+            <input type="text" id="add-credits-note" placeholder="예: 10회 재등록">
+        </div>
+
+        <div class="sync-summary" id="add-credits-preview">
+            추가할 횟수를 선택하면 변경 내용이 표시됩니다.
+        </div>
+
+        <button class="btn btn-success" onclick="saveAddedCredits()">횟수 추가 및 스케줄 동기화</button>
+    </div>
+</div>
+
 <!-- 고정 스케줄 상세 수정 모달 (팝업) -->
 <div id="edit-rule-modal" class="modal-overlay">
     <div class="modal-content">
@@ -434,6 +480,19 @@
     document.getElementById('auto-startdate').valueAsDate = new Date();
 
     function saveData() {
+        // 기존에 저장된 데이터도 새 필드가 없더라도 그대로 유지되도록 기본값만 보완합니다.
+        members.forEach(m => {
+            if (typeof m.total !== 'number') m.total = parseInt(m.total) || 0;
+            if (typeof m.remaining !== 'number') m.remaining = parseInt(m.remaining) || 0;
+            if (typeof m.absentCount !== 'number') m.absentCount = parseInt(m.absentCount) || 0;
+            if (!m.teacher) m.teacher = '원장님';
+            if (!m.note) m.note = '특이사항 없음';
+        });
+        fixedRules.forEach(r => {
+            if (!Array.isArray(r.days)) r.days = [];
+            if (typeof r.hour !== 'number') r.hour = parseInt(r.hour) || 10;
+            if (!r.equipment) r.equipment = '리포머/타워';
+        });
         recalculateLessonIndexes();
         localStorage.setItem('pilates_members', JSON.stringify(members));
         localStorage.setItem('pilates_lessons', JSON.stringify(lessons));
@@ -493,17 +552,18 @@
 
     function syncAndRefreshSchedules() {
         let addedTotalCount = 0;
+        let memberCount = 0;
 
+        // 기존 고정 규칙이 있는 회원을 우선 동기화
         members.forEach(member => {
-            let mLessons = lessons.filter(l => l.memberId === member.id && !l.isTrial);
-            let scheduledLessons = mLessons.filter(l => l.status === '수업예정');
-            
-            let missingCount = member.remaining - scheduledLessons.length;
-
-            if (missingCount > 0) {
-                let added = extendFixedSchedulesForMember(member.id, missingCount);
-                addedTotalCount += added;
+            const rule = fixedRules.find(r => r.memberId === member.id);
+            if (rule) {
+                rule.memberName = member.name;
+                memberCount++;
             }
+
+            const added = syncMemberSchedule(member.id);
+            addedTotalCount += added;
         });
 
         saveData();
@@ -511,9 +571,9 @@
         renderFixedSchedules();
 
         if (addedTotalCount > 0) {
-            alert(`부족했던 고정 스케줄 ${addedTotalCount}개가 회원님의 설정된 요일 패턴에 맞춰 동기화 반영되었습니다!`);
+            alert(`전체 동기화 완료!\n회원 ${memberCount}명의 고정 스케줄을 확인했고, 부족했던 예정 수업 ${addedTotalCount}개를 자동 보충했습니다.`);
         } else {
-            alert("모든 회원의 잔여 횟수와 스케줄표가 정확히 일치합니다.");
+            alert(`전체 동기화 완료!\n회원 ${memberCount}명의 고정 스케줄과 잔여 횟수를 확인했습니다.\n추가로 생성할 수업은 없습니다.`);
         }
     }
 
@@ -784,6 +844,153 @@
         switchMemberSubTab('list');
     }
 
+    function openAddCreditsModal(memberId) {
+        const member = members.find(m => m.id === memberId);
+        if (!member) return;
+
+        document.getElementById('add-credits-member-id').value = memberId;
+        document.getElementById('add-credits-amount').value = '';
+        document.getElementById('add-credits-note').value = '';
+        document.getElementById('add-credits-title').innerText = `➕ ${member.name} 회원님 이용권 추가`;
+        updateCreditPreview();
+        document.getElementById('add-credits-modal').style.display = 'flex';
+    }
+
+    function closeAddCreditsModal() {
+        document.getElementById('add-credits-modal').style.display = 'none';
+    }
+
+    function setCreditAmount(amount) {
+        document.getElementById('add-credits-amount').value = amount;
+        updateCreditPreview();
+    }
+
+    function updateCreditPreview() {
+        const memberId = document.getElementById('add-credits-member-id').value;
+        const member = members.find(m => m.id === memberId);
+        const amount = parseInt(document.getElementById('add-credits-amount').value) || 0;
+        const preview = document.getElementById('add-credits-preview');
+
+        if (!member || amount <= 0) {
+            preview.innerText = '추가할 횟수를 선택하면 변경 내용이 표시됩니다.';
+            return;
+        }
+
+        preview.innerHTML = `현재 <b>${member.remaining}회</b> 남음 → 추가 후 <b>${member.remaining + amount}회</b><br>
+            총 등록 횟수도 <b>${member.total}회 → ${member.total + amount}회</b>로 변경됩니다.`;
+    }
+
+    document.addEventListener('input', function(e) {
+        if (e.target && e.target.id === 'add-credits-amount') updateCreditPreview();
+    });
+
+    function saveAddedCredits() {
+        const memberId = document.getElementById('add-credits-member-id').value;
+        const member = members.find(m => m.id === memberId);
+        const amount = parseInt(document.getElementById('add-credits-amount').value);
+        const note = document.getElementById('add-credits-note').value.trim();
+
+        if (!member) return;
+        if (!Number.isInteger(amount) || amount <= 0) {
+            alert('추가할 횟수를 1회 이상 숫자로 입력해 주세요.');
+            return;
+        }
+
+        member.total = (parseInt(member.total) || 0) + amount;
+        member.remaining = (parseInt(member.remaining) || 0) + amount;
+
+        // 새 이용권이 추가되면 부족한 미래 고정수업을 자동으로 생성합니다.
+        const added = syncMemberSchedule(member.id);
+
+        saveData();
+        closeAddCreditsModal();
+        renderMembers();
+        renderSchedule();
+        renderFixedSchedules();
+
+        alert(`${member.name} 회원님의 이용권 ${amount}회가 추가되었습니다.${note ? `\n메모: ${note}` : ''}\n미리 등록된 고정 수업은 ${added}회 보충되었습니다.`);
+    }
+
+    function syncMemberSchedule(memberId) {
+        const member = members.find(m => m.id === memberId);
+        if (!member) return 0;
+
+        const scheduledLessons = lessons.filter(l =>
+            l.memberId === memberId &&
+            !l.isTrial &&
+            l.status === '수업예정'
+        );
+
+        const missingCount = Math.max(0, member.remaining - scheduledLessons.length);
+        if (missingCount <= 0) return 0;
+
+        return extendFixedSchedulesForMember(memberId, missingCount);
+    }
+
+    // 현재 생성된 수업에서 회원별 고정 요일/시간 패턴을 추정해 fixedRules에 반영합니다.
+    // 기존 fixedRules가 있는 회원은 기존 설정을 우선 보존합니다.
+    function syncFixedRulesFromLessons() {
+        let createdRules = 0;
+        let updatedRules = 0;
+
+        members.forEach(member => {
+            const memberLessons = lessons
+                .filter(l => l.memberId === member.id && !l.isTrial)
+                .sort((a,b) => (a.dateStr + String(a.hour).padStart(2,'0')).localeCompare(b.dateStr + String(b.hour).padStart(2,'0')));
+
+            if (memberLessons.length === 0) return;
+
+            let rule = fixedRules.find(r => r.memberId === member.id);
+
+            if (rule) {
+                // 회원 이름 등 변경된 기본 정보만 동기화
+                rule.memberName = member.name;
+                if (!Array.isArray(rule.days) || rule.days.length === 0) {
+                    rule.days = [...new Set(memberLessons.map(l => new Date(l.dateStr).getDay()))];
+                    updatedRules++;
+                }
+                return;
+            }
+
+            const futureLessons = memberLessons.filter(l => l.status === '수업예정');
+            const sourceLessons = futureLessons.length ? futureLessons : memberLessons;
+            const dayCounts = {};
+            sourceLessons.forEach(l => {
+                const d = new Date(l.dateStr).getDay();
+                dayCounts[d] = (dayCounts[d] || 0) + 1;
+            });
+
+            const maxCount = Math.max(...Object.values(dayCounts));
+            const inferredDays = Object.keys(dayCounts)
+                .filter(d => dayCounts[d] === maxCount)
+                .map(Number)
+                .sort((a,b) => a-b);
+
+            const first = sourceLessons[0];
+
+            fixedRules.push({
+                id: Date.now().toString() + Math.random().toString(),
+                memberId: member.id,
+                memberName: member.name,
+                days: inferredDays.length ? inferredDays : [new Date(first.dateStr).getDay()],
+                hour: parseInt(first.hour) || 10,
+                equipment: first.equipment || '리포머/타워',
+                startDate: first.dateStr
+            });
+
+            createdRules++;
+        });
+
+        saveData();
+        renderFixedSchedules();
+
+        if (createdRules === 0 && updatedRules === 0) {
+            alert('새로 불러올 고정 스케줄이 없습니다. 기존 고정 스케줄은 그대로 유지됩니다.');
+        } else {
+            alert(`현재 스케줄에서 고정 스케줄을 동기화했습니다.\n신규 ${createdRules}명 / 보완 ${updatedRules}명`);
+        }
+    }
+
     function deleteMember(memberId) {
         const member = members.find(m => m.id === memberId);
         if(!member) return;
@@ -832,8 +1039,9 @@
                         잔여 횟수: ${m.remaining}회 / 총 ${m.total}회 (결석/당일취소: ${m.absentCount || 0}회)
                     </div>
                     <div class="member-memo">💡 <b>특이사항:</b> ${m.note}</div>
-                    <div style="margin-top:10px; text-align:right;" onclick="event.stopPropagation();">
-                        <button class="btn btn-sm btn-purple" onclick="openEditMemberModal('${m.id}')">✏️ 회원 정보 / 횟수 수정</button>
+                    <div class="member-actions" onclick="event.stopPropagation();">
+                        <button class="btn btn-sm btn-purple" onclick="openEditMemberModal('${m.id}')">✏️ 회원정보 수정</button>
+                        <button class="btn btn-sm btn-teal" onclick="openAddCreditsModal('${m.id}')">➕ 횟수 추가</button>
                     </div>
                 </div>
             `;
@@ -964,30 +1172,64 @@
 
     function renderFixedSchedules() {
         const div = document.getElementById('fixed-schedule-list');
+        const summary = document.getElementById('fixed-sync-summary');
         div.innerHTML = '';
 
+        if (summary) {
+            const futureCount = lessons.filter(l => !l.isTrial && l.status === '수업예정').length;
+            summary.innerHTML = `현재 <b>${fixedRules.length}명</b>의 고정 스케줄 규칙이 저장되어 있고,
+                예정된 일반 수업은 <b>${futureCount}개</b>입니다.<br>
+                <span style="color:#007aff;">📋 현재 스케줄에서 불러오기</span>를 누르면 기존 수업 패턴을 기준으로 고정 스케줄 정보를 가져옵니다.`;
+        }
+
         if (fixedRules.length === 0) {
-            div.innerHTML = '<p style="text-align:center; color:#8e8e93; padding:15px; background:#f9f9fb; border-radius:8px;">등록된 고정 스케줄 내역이 없습니다.</p>';
+            div.innerHTML = '<p style="text-align:center; color:#8e8e93; padding:15px; background:#f9f9fb; border-radius:8px;">등록된 고정 스케줄 내역이 없습니다.<br><small>상단의 "현재 스케줄에서 불러오기"를 눌러 기존 수업을 고정 스케줄로 가져올 수 있습니다.</small></p>';
             return;
         }
 
         const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
-
         let sortedRules = [...fixedRules].sort((a,b) => a.memberName.localeCompare(b.memberName, 'ko-KR'));
 
         sortedRules.forEach(rule => {
             const dayTextStr = rule.days.map(d => dayNames[d]).join(', ');
+            const member = members.find(m => m.id === rule.memberId);
+
+            const memberLessons = lessons
+                .filter(l => l.memberId === rule.memberId && !l.isTrial && l.status === '수업예정')
+                .sort((a,b) => (a.dateStr + String(a.hour).padStart(2,'0')).localeCompare(b.dateStr + String(b.hour).padStart(2,'0')));
+
+            const previewLessons = memberLessons.slice(0, 8);
+            const moreCount = Math.max(0, memberLessons.length - previewLessons.length);
+
+            const lessonRows = previewLessons.length
+                ? previewLessons.map(l => `
+                    <div class="fixed-member-lesson-row">
+                        <span>📅 ${l.dateStr} (${dayNames[new Date(l.dateStr).getDay()]}) ${String(l.hour).padStart(2,'0')}:00</span>
+                        <span>${l.equipment || '기본'}</span>
+                    </div>
+                `).join('')
+                : '<div style="font-size:12px; color:#8e8e93;">현재 예정된 수업이 없습니다.</div>';
+
             div.innerHTML += `
                 <div class="card card-clickable" style="margin-bottom:10px; border:1px solid #e5e5ea;" onclick="openEditRuleModal('${rule.memberId}')">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                         <span style="font-weight:bold; font-size:16px; color:#1c1c1e;">👤 ${rule.memberName} 회원님</span>
                         <span style="font-size:12px; color:#007aff; font-weight:bold;">✏️ 수정하기 ></span>
                     </div>
+
                     <div style="font-size:13px; color:#3a3a3c; margin-top:6px; line-height:1.4;">
                         🗓️ <b>고정 요일:</b> 매주 <span style="color:#007aff; font-weight:bold;">[${dayTextStr}]</span><br>
                         ⏰ <b>수업 시간:</b> ${rule.hour}:00 | 🧘 <b>기구:</b> ${rule.equipment}
                     </div>
-                    <div style="margin-top:8px; text-align:right;" onclick="event.stopPropagation();">
+
+                    <div class="fixed-member-lessons" onclick="event.stopPropagation();">
+                        <div style="font-weight:bold; margin-bottom:6px;">📋 현재 등록된 예정 수업 ${memberLessons.length}회</div>
+                        ${lessonRows}
+                        ${moreCount > 0 ? `<div style="text-align:center; font-size:11px; color:#007aff; margin-top:6px;">외 ${moreCount}개 더 있음</div>` : ''}
+                    </div>
+
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;" onclick="event.stopPropagation();">
+                        <span style="font-size:11px; color:#8e8e93;">잔여 이용권: ${member ? member.remaining : 0}회</span>
                         <button class="btn btn-sm btn-danger" onclick="deleteFixedRule('${rule.memberId}')">🗑️ 고정 스케줄 삭제</button>
                     </div>
                 </div>
@@ -1042,10 +1284,12 @@
         rule.equipment = newEquipment;
 
         let todayStr = new Date().toISOString().split('T')[0];
+        // 출석/결석 처리된 과거 이력은 절대 건드리지 않고,
+        // 오늘 이후 '수업예정'만 새 고정 패턴으로 재생성합니다.
         lessons = lessons.filter(l => !(l.memberId === memberId && l.status === '수업예정' && l.dateStr >= todayStr));
 
         let scheduledLessons = lessons.filter(l => l.memberId === memberId && l.status === '수업예정');
-        let neededCount = member.remaining - scheduledLessons.length;
+        let neededCount = Math.max(0, member.remaining - scheduledLessons.length);
 
         if (neededCount > 0) {
             extendFixedSchedulesForMember(memberId, neededCount);
@@ -1436,7 +1680,9 @@
         renderSchedule();
     }
 
+    // 앱 실행 시 기존 데이터를 새 구조에 맞게 보완합니다. 기존 회원/수업 데이터는 삭제하지 않습니다.
+    saveData();
     renderSchedule();
 </script>
 </body>
-</html>
+</html>     <<< 이거는 내가 필라테스 원장이고 어플 만든거야 여기서 추가할 사항좀 추가해서 전체 코드로 줄래? 어플을 이쁘고 실용적으로 잘 꾸미고 싶어 회원관리 -> 기존회원목록에서 회원정보 수정 / 횟수 추가 버튼 따로 만들어주고 횟수 추가는 8회 10회 20회 아니면 임의로 숫자 입력 가능하게 만들어줘. 그리고 스케쥴 관리에 현재 등록된 고정 스케줄 스케줄 보기에서 회원별로 리스트도 끌고와서 아래쪽 회원 고정스케줄 내역 리스트로 보여주게끔 버튼? 동기화? 그런거 만들어줘. 잘부탁해 나는 필라테스 원장이고 이거를 잘 활용ㅇ할거야. 너가 잘 추천좀 해줘봐 좋은 어플만들수있게 그리고 스케줄 관리 하단 내역 고정스케줄 리스트에 내가 현재 작성한 스케줄 보기에 고정 스케줄 끌고와서 회원별 입력한 고정스케줄 내역 볼 수 있게 해주고, 그거 클릭해서 고정스케줄 수정도 가능한 기능 추가했으면 해. 내가 어플 코드 수정할 때 기존 데이터도 반영될 수 있도록 동기화 버튼 하나 추가해줘서 내가 말한 거 가능하도록 만들어줘 부탁해
