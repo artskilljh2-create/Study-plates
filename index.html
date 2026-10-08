@@ -50,14 +50,13 @@
         .cal-header { font-size: 12px; font-weight: bold; color: #8e8e93; padding: 6px 0; }
         .cal-day { min-height: 55px; background: #f9f9fb; border-radius: 6px; padding: 4px; font-size: 12px; border: 1px solid #e5e5ea; cursor: pointer; }
         .cal-day.today { border-color: #007aff; background: #e5f1ff; font-weight: bold; }
-        .cal-dot { display: block; font-size: 10px; color: #007aff; margin-top: 2px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
+        .cal-dot { display: block; font-size: 10px; color: #007aff; margin-top: 2px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; text-align: left; }
 
         .member-memo { font-size: 12px; color: #8e8e93; background: #f8f9fa; padding: 8px; border-radius: 6px; margin-top: 6px; border-left: 3px solid #007aff; }
         .delete-icon { position: absolute; top: 14px; right: 14px; color: #ff3b30; cursor: pointer; font-size: 12px; font-weight: bold; border: 1px solid #ff3b30; padding: 2px 6px; border-radius: 4px; }
         .lesson-delete-btn { color: #8e8e93; cursor: pointer; font-size: 12px; border: 1px solid #e5e5ea; padding: 2px 6px; border-radius: 4px; }
         .lesson-delete-btn:hover { color: #ff3b30; border-color: #ff3b30; }
 
-        /* 생성 방식 전환 탭 */
         .sub-type-tabs { display: flex; gap: 8px; margin-bottom: 14px; }
         .sub-type-btn { flex: 1; padding: 8px; border: 1px solid #007aff; background: #fff; color: #007aff; border-radius: 8px; font-size: 13px; font-weight: bold; cursor: pointer; text-align: center; }
         .sub-type-btn.active { background: #007aff; color: #fff; }
@@ -117,7 +116,7 @@
         <div id="member-list"></div>
     </div>
 
-    <!-- 3. 스케줄 생성 탭 (1회 단발 생성 / 고정 연쇄 생성 선택 가능) -->
+    <!-- 3. 스케줄 생성 탭 -->
     <div id="tab-auto-schedule" style="display: none;">
         <div class="card">
             <h3>⚡ 스케줄 추가 및 생성</h3>
@@ -134,7 +133,6 @@
                 </select>
             </div>
 
-            <!-- 고정 요일 연쇄 생성 모드 전용 필드 -->
             <div id="multi-create-fields">
                 <div class="form-group">
                     <label>생성할 수업 횟수</label>
@@ -214,7 +212,7 @@
 
     let selectedDays = [2, 4];
     let currentViewMode = 'day';
-    let createMode = 'single'; // 'single' 또는 'multi'
+    let createMode = 'single';
 
     document.getElementById('schedule-date').valueAsDate = new Date();
     document.getElementById('auto-startdate').valueAsDate = new Date();
@@ -250,7 +248,6 @@
         }
     }
 
-    // 1회 단발 추가 / 연쇄 생성 모드 전환
     function setCreateMode(mode) {
         createMode = mode;
         const btnSingle = document.getElementById('btn-mode-single');
@@ -435,7 +432,6 @@
         }
     }
 
-    // 스케줄 생성 핸들러 (1회 추가 vs 고정 연쇄 생성)
     function handleScheduleCreation() {
         if(createMode === 'single') {
             addSingleSchedule();
@@ -444,7 +440,6 @@
         }
     }
 
-    // 1회 단발 스케줄 생성
     function addSingleSchedule() {
         const memberId = document.getElementById('auto-member-select').value;
         const dateVal = document.getElementById('auto-startdate').value;
@@ -477,7 +472,6 @@
         switchTab('schedule');
     }
 
-    // 고정 요일 연쇄 자동 생성
     function generateAutoSchedules() {
         const memberId = document.getElementById('auto-member-select').value;
         const count = parseInt(document.getElementById('auto-count').value);
@@ -520,13 +514,11 @@
         switchTab('schedule');
     }
 
-    // 수업 개별 삭제
     function deleteLesson(lessonId) {
         const lesson = lessons.find(l => l.id === lessonId);
         if(!lesson) return;
 
         if(confirm(`${lesson.dateStr} ${lesson.hour}:00 ${lesson.memberName} 회원님의 수업을 삭제하시겠습니까?`)) {
-            // 출석이나 결석 상태였던 수업을 삭제할 경우 회원 차감 횟수 복구
             if(lesson.status === '출석' || lesson.status === '결석(차감)') {
                 const member = members.find(m => m.id === lesson.memberId);
                 if(member) member.remaining++;
@@ -537,7 +529,6 @@
         }
     }
 
-    // 수업 날짜/시간 수동 변경 (다른 날로 이동)
     function editLessonDateTime(lessonId) {
         const lesson = lessons.find(l => l.id === lessonId);
         if(!lesson) return;
@@ -629,6 +620,7 @@
         }
     }
 
+    // 3. 월별 보기 (시간 순 정렬 기능 반영)
     function renderMonthView(dateStr, container) {
         let selectedDate = new Date(dateStr);
         let year = selectedDate.getFullYear();
@@ -655,6 +647,10 @@
         for(let day = 1; day <= lastDate; day++) {
             let currentStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             let dayLessons = lessons.filter(l => l.dateStr === currentStr);
+            
+            // ★ 시간(hour) 순으로 정렬
+            dayLessons.sort((a, b) => a.hour - b.hour);
+
             let isToday = (currentStr === todayStr) ? 'today' : '';
 
             let lessonLabels = dayLessons.map(l => `<span class="cal-dot">• ${l.hour}시 ${l.memberName}</span>`).join('');
