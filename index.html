@@ -44,6 +44,11 @@
         .day-btn { flex: 1; padding: 8px 0; border: 1px solid #c7c7cc; border-radius: 6px; background: #f2f2f7; text-align: center; font-size: 13px; cursor: pointer; }
         .day-btn.selected { background: #007aff; color: white; border-color: #007aff; font-weight: bold; }
 
+        /* 터치 슬라이드 영역 스타일 */
+        .swipe-container { touch-action: pan-y; }
+        .nav-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .nav-title { font-weight: bold; font-size: 15px; color: #007aff; }
+
         .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; }
         .cal-header { font-size: 12px; font-weight: bold; color: #8e8e93; padding: 6px 0; }
         .cal-day { min-height: 55px; background: #f9f9fb; border-radius: 6px; padding: 4px; font-size: 12px; border: 1px solid #e5e5ea; cursor: pointer; }
@@ -211,6 +216,12 @@
     let selectedDays = [2, 4];
     let currentViewMode = 'day';
     let createMode = 'single';
+
+    // 터치 슬라이드 좌표 관련 변수
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchEndX = 0;
+    let touchEndY = 0;
 
     document.getElementById('schedule-date').valueAsDate = new Date();
     document.getElementById('auto-startdate').valueAsDate = new Date();
@@ -512,7 +523,6 @@
         switchTab('schedule');
     }
 
-    // 수업 삭제 시 횟수 차감 없이 다음 주로 1회 자동 추가
     function deleteLesson(lessonId) {
         const lesson = lessons.find(l => l.id === lessonId);
         if(!lesson) return;
@@ -520,12 +530,10 @@
         if(confirm(`${lesson.dateStr} ${lesson.hour}:00 ${lesson.memberName} 회원님의 수업을 취소/삭제하시겠습니까?\n(횟수는 차감되지 않으며, 다음 주 동일 요일에 1회 수업이 자동 연장 추가됩니다.)`)) {
             const member = members.find(m => m.id === lesson.memberId);
             
-            // 이미 출석/결석(차감)되었던 수업을 삭제하는 경우에는 차감되었던 횟수를 원복
             if((lesson.status === '출석' || lesson.status === '결석(차감)') && member) {
                 member.remaining++;
             }
 
-            // 삭제된 날짜로부터 7일 뒤(다음 주) 날짜 계산 후 레슨 1회 자동 생성
             let d = new Date(lesson.dateStr);
             d.setDate(d.getDate() + 7);
             const newDateStr = d.toISOString().split('T')[0];
@@ -541,7 +549,6 @@
                 lessonIndex: lesson.lessonIndex
             });
 
-            // 기존 수업 삭제
             lessons = lessons.filter(l => l.id !== lessonId);
             
             saveData();
@@ -583,37 +590,71 @@
         }
     }
 
+    // 1. 일별 보기 (이전날/다음날 이동 + 스와이프 적용)
     function renderDayView(dateStr, container) {
         const todaysLessons = lessons.filter(l => l.dateStr === dateStr);
         const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
         const selectedDateObj = new Date(dateStr);
         const dayOfWeek = dayNames[selectedDateObj.getDay()];
 
-        const dateHeader = document.createElement('div');
-        dateHeader.style.cssText = "font-weight: bold; font-size: 15px; color: #007aff; margin-bottom: 12px; padding-left: 4px;";
-        dateHeader.innerText = `📌 ${dateStr} (${dayOfWeek}) 수업 일정 (${todaysLessons.length}개)`;
-        container.appendChild(dateHeader);
+        const swipeWrapper = document.createElement('div');
+        swipeWrapper.className = 'swipe-container';
+        swipeWrapper.addEventListener('touchstart', handleTouchStart, false);
+        swipeWrapper.addEventListener('touchend', (e) => handleSwipeEnd(e, 'day'), false);
+
+        const navHeader = document.createElement('div');
+        navHeader.className = 'nav-header';
+        navHeader.innerHTML = `
+            <button class="btn btn-sm btn-secondary" onclick="changeDate(-1)">◀ 이전날</button>
+            <div class="nav-title">📌 ${dateStr} (${dayOfWeek})</div>
+            <button class="btn btn-sm btn-secondary" onclick="changeDate(1)">다음날 ▶</button>
+        `;
+        swipeWrapper.appendChild(navHeader);
 
         if(todaysLessons.length === 0) {
             const emptyMsg = document.createElement('p');
             emptyMsg.style.cssText = "text-align:center; color:#8e8e93; padding:20px; background:#fff; border-radius:12px;";
             emptyMsg.innerText = "예정된 수업이 없습니다.";
-            container.appendChild(emptyMsg);
-            return;
+            swipeWrapper.appendChild(emptyMsg);
+        } else {
+            todaysLessons.sort((a,b) => a.hour - b.hour);
+            todaysLessons.forEach(lesson => {
+                swipeWrapper.appendChild(createLessonCard(lesson, false, dayOfWeek));
+            });
         }
 
-        todaysLessons.sort((a,b) => a.hour - b.hour);
-        todaysLessons.forEach(lesson => {
-            container.appendChild(createLessonCard(lesson, false, dayOfWeek));
-        });
+        const guideText = document.createElement('div');
+        guideText.style.cssText = "font-size:11px; color:#8e8e93; text-align:center; margin-top:10px;";
+        guideText.innerText = "👈 좌우로 슬라이드하면 이전날 / 다음날로 이동합니다 👉";
+        swipeWrapper.appendChild(guideText);
+
+        container.appendChild(swipeWrapper);
     }
 
+    // 2. 주별 보기 (이전주/다음주 이동 + 스와이프 적용)
     function renderWeekView(dateStr, container) {
         let curr = new Date(dateStr);
         let first = curr.getDate() - curr.getDay();
-        
+        let weekStartDate = new Date(curr.setDate(first));
+        let weekStartStr = weekStartDate.toISOString().split('T')[0];
+
+        const swipeWrapper = document.createElement('div');
+        swipeWrapper.className = 'swipe-container';
+        swipeWrapper.addEventListener('touchstart', handleTouchStart, false);
+        swipeWrapper.addEventListener('touchend', (e) => handleSwipeEnd(e, 'week'), false);
+
+        const navHeader = document.createElement('div');
+        navHeader.className = 'nav-header';
+        navHeader.innerHTML = `
+            <button class="btn btn-sm btn-secondary" onclick="changeWeek(-7)">◀ 이전주</button>
+            <div class="nav-title">🗓️ ${weekStartStr} 주간 스케줄</div>
+            <button class="btn btn-sm btn-secondary" onclick="changeWeek(7)">다음주 ▶</button>
+        `;
+        swipeWrapper.appendChild(navHeader);
+
         for(let i = 0; i < 7; i++) {
-            let next = new Date(curr.setDate(first + i));
+            let next = new Date(weekStartDate);
+            next.setDate(weekStartDate.getDate() + i);
             let dStr = next.toISOString().split('T')[0];
             let dayLessons = lessons.filter(l => l.dateStr === dStr);
             let dayNames = ['일', '월', '화', '수', '목', '금', '토'];
@@ -637,10 +678,18 @@
                     dayBox.appendChild(createLessonCard(l, true, dayNames[i]));
                 });
             }
-            container.appendChild(dayBox);
+            swipeWrapper.appendChild(dayBox);
         }
+
+        const guideText = document.createElement('div');
+        guideText.style.cssText = "font-size:11px; color:#8e8e93; text-align:center; margin-top:10px;";
+        guideText.innerText = "👈 좌우로 슬라이드하면 이전주 / 다음주로 이동합니다 👉";
+        swipeWrapper.appendChild(guideText);
+
+        container.appendChild(swipeWrapper);
     }
 
+    // 3. 월별 보기 (이전달/다음달 이동 + 스와이프 적용)
     function renderMonthView(dateStr, container) {
         let selectedDate = new Date(dateStr);
         let year = selectedDate.getFullYear();
@@ -650,7 +699,19 @@
         let lastDate = new Date(year, month + 1, 0).getDate();
 
         let card = document.createElement('div');
-        card.className = 'card';
+        card.className = 'card swipe-container';
+
+        card.addEventListener('touchstart', handleTouchStart, false);
+        card.addEventListener('touchend', (e) => handleSwipeEnd(e, 'month'), false);
+
+        let navHeader = document.createElement('div');
+        navHeader.className = 'nav-header';
+        navHeader.innerHTML = `
+            <button class="btn btn-sm btn-secondary" onclick="changeMonth(-1)">◀ 이전달</button>
+            <div class="nav-title">📅 ${year}년 ${month + 1}월</div>
+            <button class="btn btn-sm btn-secondary" onclick="changeMonth(1)">다음달 ▶</button>
+        `;
+        card.appendChild(navHeader);
         
         let grid = document.createElement('div');
         grid.className = 'calendar-grid';
@@ -683,7 +744,66 @@
         }
 
         card.appendChild(grid);
+        
+        let guideText = document.createElement('div');
+        guideText.style.cssText = "font-size:11px; color:#8e8e93; text-align:center; margin-top:10px;";
+        guideText.innerText = "👈 좌우로 슬라이드하면 이전달 / 다음달로 이동합니다 👉";
+        card.appendChild(guideText);
+
         container.appendChild(card);
+    }
+
+    // 터치 시작 위치 감지
+    function handleTouchStart(e) {
+        touchStartX = e.changedTouches[0].screenX;
+        touchStartY = e.changedTouches[0].screenY;
+    }
+
+    // 터치 종료 시 모드별(일/주/월) 스와이프 동작 수행
+    function handleSwipeEnd(e, mode) {
+        touchEndX = e.changedTouches[0].screenX;
+        touchEndY = e.changedTouches[0].screenY;
+
+        const deltaX = touchEndX - touchStartX;
+        const deltaY = touchEndY - touchStartY;
+
+        // 세로 스크롤보다 가로 이동이 큰 경우에만 스와이프 판정
+        if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 50) {
+            if (mode === 'day') {
+                if (deltaX < 0) changeDate(1);  // 오른쪽->왼쪽 : 다음날
+                else changeDate(-1);           // 왼쪽->오른쪽 : 이전날
+            } else if (mode === 'week') {
+                if (deltaX < 0) changeWeek(7);  // 오른쪽->왼쪽 : 다음주
+                else changeWeek(-7);           // 왼쪽->오른쪽 : 이전주
+            } else if (mode === 'month') {
+                if (deltaX < 0) changeMonth(1); // 오른쪽->왼쪽 : 다음달
+                else changeMonth(-1);          // 왼쪽->오른쪽 : 이전달
+            }
+        }
+    }
+
+    // 일 단위 이동
+    function changeDate(days) {
+        let currentDate = new Date(document.getElementById('schedule-date').value);
+        currentDate.setDate(currentDate.getDate() + days);
+        document.getElementById('schedule-date').value = currentDate.toISOString().split('T')[0];
+        renderSchedule();
+    }
+
+    // 주 단위 이동
+    function changeWeek(days) {
+        let currentDate = new Date(document.getElementById('schedule-date').value);
+        currentDate.setDate(currentDate.getDate() + days);
+        document.getElementById('schedule-date').value = currentDate.toISOString().split('T')[0];
+        renderSchedule();
+    }
+
+    // 월 단위 이동
+    function changeMonth(offset) {
+        let currentDate = new Date(document.getElementById('schedule-date').value);
+        currentDate.setMonth(currentDate.getMonth() + offset);
+        document.getElementById('schedule-date').value = currentDate.toISOString().split('T')[0];
+        renderSchedule();
     }
 
     function selectDateFromCal(dateStr) {
