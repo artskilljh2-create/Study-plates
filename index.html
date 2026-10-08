@@ -312,41 +312,66 @@
         });
     }
 
-    // 잔여 횟수와 고정 스케줄 개수 자동 수량 동기화 기능
+    /* 회원의 고정 요일 패턴(화, 목 등)을 분석하여 부족한 스케줄을 교대 순서에 맞게 연장 생성 */
+    function extendFixedSchedulesForMember(memberId, countNeeded) {
+        let mLessons = lessons.filter(l => l.memberId === memberId && !l.isTrial);
+        if (mLessons.length === 0 || countNeeded <= 0) return 0;
+
+        mLessons.sort((a,b) => (a.dateStr + a.hour).localeCompare(b.dateStr + b.hour));
+
+        // 기존 레슨들에서 고정 요일(0~6)과 해당 요일의 시간대, 기구 정보 수집
+        let dayPatternMap = {};
+        mLessons.forEach(l => {
+            let dayNum = new Date(l.dateStr).getDay();
+            if (!dayPatternMap[dayNum]) {
+                dayPatternMap[dayNum] = { hour: l.hour, equipment: l.equipment };
+            }
+        });
+
+        let targetDays = Object.keys(dayPatternMap).map(Number).sort((a,b) => a - b);
+        if (targetDays.length === 0) return 0;
+
+        let lastLesson = mLessons[mLessons.length - 1];
+        let currentPointerDate = new Date(lastLesson.dateStr);
+
+        let createdCount = 0;
+        while (createdCount < countNeeded) {
+            currentPointerDate.setDate(currentPointerDate.getDate() + 1);
+            let currentDayNum = currentPointerDate.getDay();
+
+            if (targetDays.includes(currentDayNum)) {
+                let patternInfo = dayPatternMap[currentDayNum];
+                let newDateStr = currentPointerDate.toISOString().split('T')[0];
+
+                lessons.push({
+                    id: Date.now() + Math.random().toString(),
+                    isTrial: false,
+                    memberId: memberId,
+                    memberName: mLessons[0].memberName,
+                    dateStr: newDateStr,
+                    hour: patternInfo.hour,
+                    status: '수업예정',
+                    equipment: patternInfo.equipment
+                });
+                createdCount++;
+            }
+        }
+        return createdCount;
+    }
+
+    // 잔여 횟수와 스케줄표 동기화 실행
     function syncAndRefreshSchedules() {
         let addedTotalCount = 0;
 
         members.forEach(member => {
             let mLessons = lessons.filter(l => l.memberId === member.id && !l.isTrial);
-            let activeLessons = mLessons.filter(l => l.status === '수업예정' || l.status === '출석' || l.status === '결석(차감)');
+            let scheduledLessons = mLessons.filter(l => l.status === '수업예정');
             
-            // 현재 회원의 잔여 횟수에 비해 생성된 스케줄 수가 적을 경우 부족한 수만큼 고정 연장 추가
-            let missingCount = member.remaining - (mLessons.filter(l => l.status === '수업예정').length);
+            let missingCount = member.remaining - scheduledLessons.length;
 
-            if (missingCount > 0 && mLessons.length > 0) {
-                mLessons.sort((a,b) => (a.dateStr + a.hour).localeCompare(b.dateStr + b.hour));
-                let lastLesson = mLessons[mLessons.length - 1];
-
-                let lastDateObj = new Date(lastLesson.dateStr);
-                let hour = lastLesson.hour;
-                let equipment = lastLesson.equipment;
-
-                for (let i = 0; i < missingCount; i++) {
-                    lastDateObj.setDate(lastDateObj.getDate() + 7);
-                    let newDateStr = lastDateObj.toISOString().split('T')[0];
-
-                    lessons.push({
-                        id: Date.now() + Math.random().toString(),
-                        isTrial: false,
-                        memberId: member.id,
-                        memberName: member.name,
-                        dateStr: newDateStr,
-                        hour: hour,
-                        status: '수업예정',
-                        equipment: equipment
-                    });
-                    addedTotalCount++;
-                }
+            if (missingCount > 0) {
+                let added = extendFixedSchedulesForMember(member.id, missingCount);
+                addedTotalCount += added;
             }
         });
 
@@ -354,9 +379,9 @@
         renderSchedule();
 
         if (addedTotalCount > 0) {
-            alert(`총 ${addedTotalCount}개의 부족했던 고정 스케줄이 잔여 횟수에 맞게 자동으로 보충/동기화되었습니다!`);
+            alert(`회원님의 화·목 등 고정 요일 순서에 맞춰 부족했던 스케줄 ${addedTotalCount}개가 정확하게 동기화 추가되었습니다!`);
         } else {
-            alert("모든 회원의 잔여 횟수와 스케줄표가 정확히 일치합니다.");
+            alert("모든 회원의 잔여 횟수와 고정 스케줄표가 정확히 동기화되어 있습니다.");
         }
     }
 
@@ -637,12 +662,11 @@
         });
     }
 
-    /* 자유로운 횟수 충전 및 잔여 횟수 수동 수정 모달/프롬프트 함수 */
     function editMemberCredits(memberId) {
         const member = members.find(m => m.id === memberId);
         if(!member) return;
 
-        const choice = prompt(`[${member.name} 회원님 횟수 관리]\n\n1. 숫자를 입력하여 '추가 충전' (예: 10 입력 시 +10회 추가)\n2. 잔여 횟수 자체를 직접 변경하려는 경우 숫자를 입력하세요.\n\n현재 잔여 횟수: ${member.remaining}회 / 총 ${member.total}회\n\n추가 충전할 횟수를 입력하세요:`, "10");
+        const choice = prompt(`[${member.name} 회원님 횟수 관리]\n\n추가 충전할 횟수를 숫자로 입력하세요:\n(예: 10 입력 시 +10회 추가)\n\n현재 잔여 횟수: ${member.remaining}회 / 총 ${member.total}회`, "10");
 
         if (choice !== null && choice.trim() !== "") {
             const inputNum = parseInt(choice.trim());
@@ -651,7 +675,7 @@
                 member.remaining += inputNum;
                 saveData();
                 renderMembers();
-                alert(`${member.name} 회원님의 이용권이 ${inputNum}회 추가 충전되었습니다. (총 ${member.remaining}회)`);
+                alert(`${member.name} 회원님의 이용권이 ${inputNum}회 추가 충전되었습니다. (잔여: ${member.remaining}회)`);
             } else {
                 alert("올바른 숫자를 입력해 주세요.");
             }
@@ -707,6 +731,7 @@
         switchTab('schedule');
     }
 
+    /* 고정 스케줄 수동 삭제 시 화목 고정 순서에 맞춰 1회 연장 자동 생성 */
     function deleteLesson(lessonId) {
         const lesson = lessons.find(l => l.id === lessonId);
         if(!lesson) return;
@@ -720,45 +745,21 @@
             return;
         }
 
-        if(confirm(`${lesson.dateStr} ${lesson.hour}:00 ${lesson.memberName} 회원님의 수업을 취소/삭제하시겠습니까?\n(횟수는 유지되며, 가장 마지막 고정 수업일 다음 주 동일 요일에 1회 수업이 자동 연장 추가됩니다.)`)) {
+        if(confirm(`${lesson.dateStr} ${lesson.hour}:00 ${lesson.memberName} 회원님의 수업을 취소/삭제하시겠습니까?\n(횟수는 유지되며, 회원의 고정 요일 순서(화·목 등)에 맞게 1회 수업이 자동 연장 추가됩니다.)`)) {
             const member = members.find(m => m.id === lesson.memberId);
             
             if((lesson.status === '출석' || lesson.status === '결석(차감)') && member) {
                 member.remaining++;
             }
 
-            let mLessons = lessons.filter(l => l.memberId === lesson.memberId && !l.isTrial);
-            mLessons.sort((a,b) => (a.dateStr + a.hour).localeCompare(b.dateStr + b.hour));
-            
-            let lastDateObj = new Date(lesson.dateStr);
-            let lastHour = lesson.hour;
-            let lastEquipment = lesson.equipment;
-
-            if (mLessons.length > 0) {
-                const lastLesson = mLessons[mLessons.length - 1];
-                lastDateObj = new Date(lastLesson.dateStr);
-                lastHour = lastLesson.hour;
-                lastEquipment = lastLesson.equipment;
-            }
-
-            lastDateObj.setDate(lastDateObj.getDate() + 7);
-            const newDateStr = lastDateObj.toISOString().split('T')[0];
-
-            lessons.push({
-                id: Date.now() + Math.random().toString(),
-                isTrial: false,
-                memberId: lesson.memberId,
-                memberName: lesson.memberName,
-                dateStr: newDateStr,
-                hour: lastHour,
-                status: '수업예정',
-                equipment: lastEquipment
-            });
-
+            // 현재 선택한 스케줄 삭제
             lessons = lessons.filter(l => l.id !== lessonId);
             
+            // 회원의 고정 패턴(화·목 등)에 맞춰 뒤쪽에 1회 자동 생성
+            extendFixedSchedulesForMember(lesson.memberId, 1);
+
             saveData();
-            alert(`수업이 취소되었습니다. 이용권 횟수 손실 없이 마지막 고정일 다음 주(${newDateStr})로 1회 수업이 자동 연장 추가되었습니다.`);
+            alert(`수업이 취소되었습니다. 이용권 횟수 손실 없이 회원의 고정 요일 순서에 맞춰 1회 수업이 뒤쪽 스케줄에 자동 연장 추가되었습니다.`);
             renderSchedule();
         }
     }
