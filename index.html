@@ -60,9 +60,12 @@
         .lesson-delete-btn { color: #8e8e93; cursor: pointer; font-size: 12px; border: 1px solid #e5e5ea; padding: 2px 6px; border-radius: 4px; margin-left: 4px; }
         .lesson-delete-btn:hover { color: #ff3b30; border-color: #ff3b30; }
 
-        .sub-type-tabs { display: flex; gap: 8px; margin-bottom: 14px; }
-        .sub-type-btn { flex: 1; padding: 8px; border: 1px solid #007aff; background: #fff; color: #007aff; border-radius: 8px; font-size: 13px; font-weight: bold; cursor: pointer; text-align: center; }
-        .sub-type-btn.active { background: #007aff; color: #fff; }
+        /* 모달 팝업 스타일 */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); z-index: 1000; justify-content: center; align-items: center; }
+        .modal-content { background: #fff; width: 90%; max-width: 450px; border-radius: 16px; padding: 20px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid #e5e5ea; padding-bottom: 10px; }
+        .modal-header h3 { margin: 0; font-size: 17px; color: #1c1c1e; }
+        .close-btn { background: none; border: none; font-size: 20px; color: #8e8e93; cursor: pointer; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -72,17 +75,21 @@
 <div class="nav-tabs">
     <button class="tab-btn active" onclick="switchTab('schedule')">📅 스케줄 보기</button>
     <button class="tab-btn" onclick="switchTab('members')">👤 회원 관리</button>
-    <button class="tab-btn" onclick="switchTab('auto-schedule')">⚡ 스케줄 생성</button>
+    <button class="tab-btn" onclick="switchTab('auto-schedule')">⚡ 고정 스케줄 생성</button>
     <button class="tab-btn" onclick="switchTab('backup')">💾 백업/복원</button>
 </div>
 
 <div class="container">
     <!-- 1. 스케줄 보기 탭 -->
     <div id="tab-schedule">
-        <div class="view-modes">
-            <button class="view-btn active" onclick="setViewMode('day')">일별 보기</button>
-            <button class="view-btn" onclick="setViewMode('week')">주별 보기</button>
-            <button class="view-btn" onclick="setViewMode('month')">월별 보기</button>
+        <div style="display: flex; gap: 8px; margin-bottom: 14px; align-items: center;">
+            <div class="view-modes" style="flex: 1; margin-bottom: 0;">
+                <button class="view-btn active" onclick="setViewMode('day')">일별 보기</button>
+                <button class="view-btn" onclick="setViewMode('week')">주별 보기</button>
+                <button class="view-btn" onclick="setViewMode('month')">월별 보기</button>
+            </div>
+            <!-- 플러스 1회 수업 추가 버튼 -->
+            <button class="btn btn-success btn-sm" style="padding: 9px 12px; font-size: 13px; font-weight: bold; white-space: nowrap;" onclick="openAddModal()">➕ 수업 추가</button>
         </div>
 
         <input type="date" id="schedule-date" class="date-picker" onchange="renderSchedule()">
@@ -119,15 +126,10 @@
         <div id="member-list"></div>
     </div>
 
-    <!-- 3. 스케줄 생성 탭 -->
+    <!-- 3. 스케줄 생성 탭 (고정 연쇄 생성 전용) -->
     <div id="tab-auto-schedule" style="display: none;">
         <div class="card">
-            <h3>⚡ 스케줄 추가 및 생성</h3>
-            
-            <div class="sub-type-tabs">
-                <button class="sub-type-btn active" id="btn-mode-single" onclick="setCreateMode('single')">📌 1회 수동 추가</button>
-                <button class="sub-type-btn" id="btn-mode-multi" onclick="setCreateMode('multi')">🔄 고정 요일 연쇄 생성</button>
-            </div>
+            <h3>🔄 고정 요일 스케줄 연쇄 생성</h3>
 
             <div class="form-group">
                 <label>대상 회원 선택 *</label>
@@ -136,26 +138,25 @@
                 </select>
             </div>
 
-            <div id="multi-create-fields">
-                <div class="form-group">
-                    <label>생성할 수업 횟수</label>
-                    <input type="number" id="auto-count" value="20">
-                </div>
-                <div class="form-group">
-                    <label>고정 요일 선택 (복수 선택 가능) *</label>
-                    <div class="days-selector">
-                        <div class="day-btn" onclick="toggleDay(this, 1)">월</div>
-                        <div class="day-btn selected" onclick="toggleDay(this, 2)">화</div>
-                        <div class="day-btn" onclick="toggleDay(this, 3)">수</div>
-                        <div class="day-btn selected" onclick="toggleDay(this, 4)">목</div>
-                        <div class="day-btn" onclick="toggleDay(this, 5)">금</div>
-                        <div class="day-btn" onclick="toggleDay(this, 6)">토</div>
-                    </div>
+            <div class="form-group">
+                <label>생성할 수업 횟수</label>
+                <input type="number" id="auto-count" value="20">
+            </div>
+
+            <div class="form-group">
+                <label>고정 요일 선택 (복수 선택 가능) *</label>
+                <div class="days-selector">
+                    <div class="day-btn" onclick="toggleDay(this, 1)">월</div>
+                    <div class="day-btn selected" onclick="toggleDay(this, 2)">화</div>
+                    <div class="day-btn" onclick="toggleDay(this, 3)">수</div>
+                    <div class="day-btn selected" onclick="toggleDay(this, 4)">목</div>
+                    <div class="day-btn" onclick="toggleDay(this, 5)">금</div>
+                    <div class="day-btn" onclick="toggleDay(this, 6)">토</div>
                 </div>
             </div>
 
             <div class="form-group">
-                <label id="date-label">수업 일자 *</label>
+                <label>시작 일자 *</label>
                 <input type="date" id="auto-startdate">
             </div>
 
@@ -182,7 +183,7 @@
                 </select>
             </div>
 
-            <button class="btn btn-success" id="btn-submit-schedule" onclick="handleScheduleCreation()">1회 수업 추가하기</button>
+            <button class="btn btn-success" onclick="generateAutoSchedules()">고정 스케줄 연쇄 생성하기</button>
         </div>
     </div>
 
@@ -209,15 +210,55 @@
     </div>
 </div>
 
+<!-- 1회 단기 수업 추가 팝업 (모달) -->
+<div id="add-modal" class="modal-overlay">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>📌 1회 수업 추가</h3>
+            <button class="close-btn" onclick="closeAddModal()">✕</button>
+        </div>
+        <div class="form-group">
+            <label>대상 회원 선택 *</label>
+            <select id="modal-member-select">
+                <option value="">-- 회원을 선택하세요 --</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>수업 일자 *</label>
+            <input type="date" id="modal-date">
+        </div>
+        <div class="form-group">
+            <label>수업 시간 *</label>
+            <select id="modal-hour">
+                <option value="9">오전 09:00</option>
+                <option value="10" selected>오전 10:00</option>
+                <option value="11">오전 11:00</option>
+                <option value="14">오후 02:00</option>
+                <option value="15">오후 03:00</option>
+                <option value="19">오후 07:00</option>
+                <option value="20">오후 08:00</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>주요 사용 기구</label>
+            <select id="modal-equipment">
+                <option value="리포머/타워">리포머 / 타워</option>
+                <option value="바렐/체어">바렐 / 체어</option>
+                <option value="캐딜락">캐딜락</option>
+                <option value="매트/소도구">매트 / 소도구</option>
+            </select>
+        </div>
+        <button class="btn btn-success" onclick="saveModalSchedule()">수업 추가하기</button>
+    </div>
+</div>
+
 <script>
     let members = JSON.parse(localStorage.getItem('pilates_members')) || [];
     let lessons = JSON.parse(localStorage.getItem('pilates_lessons')) || [];
 
     let selectedDays = [2, 4];
     let currentViewMode = 'day';
-    let createMode = 'single';
 
-    // 터치 슬라이드 좌표 관련 변수
     let touchStartX = 0;
     let touchStartY = 0;
     let touchEndX = 0;
@@ -249,34 +290,10 @@
         } else if(tab === 'auto-schedule') {
             document.querySelectorAll('.tab-btn')[2].classList.add('active');
             document.getElementById('tab-auto-schedule').style.display = 'block';
-            populateMemberDropdown();
-            setCreateMode('single');
+            populateMemberDropdown('auto-member-select');
         } else if(tab === 'backup') {
             document.querySelectorAll('.tab-btn')[3].classList.add('active');
             document.getElementById('tab-backup').style.display = 'block';
-        }
-    }
-
-    function setCreateMode(mode) {
-        createMode = mode;
-        const btnSingle = document.getElementById('btn-mode-single');
-        const btnMulti = document.getElementById('btn-mode-multi');
-        const multiFields = document.getElementById('multi-create-fields');
-        const dateLabel = document.getElementById('date-label');
-        const submitBtn = document.getElementById('btn-submit-schedule');
-
-        if(mode === 'single') {
-            btnSingle.classList.add('active');
-            btnMulti.classList.remove('active');
-            multiFields.style.display = 'none';
-            dateLabel.innerText = '수업 일자 *';
-            submitBtn.innerText = '1회 수업 추가하기';
-        } else {
-            btnSingle.classList.remove('active');
-            btnMulti.classList.add('active');
-            multiFields.style.display = 'block';
-            dateLabel.innerText = '시작 일자 *';
-            submitBtn.innerText = '고정 스케줄 연쇄 생성하기';
         }
     }
 
@@ -297,6 +314,52 @@
         } else {
             selectedDays.push(dayIndex);
         }
+    }
+
+    /* 팝업 모달 제어 함수 */
+    function openAddModal() {
+        populateMemberDropdown('modal-member-select');
+        // 현재 선택된 날짜로 기본값 세팅
+        const currentDateStr = document.getElementById('schedule-date').value;
+        document.getElementById('modal-date').value = currentDateStr;
+        document.getElementById('add-modal').style.display = 'flex';
+    }
+
+    function closeAddModal() {
+        document.getElementById('add-modal').style.display = 'none';
+    }
+
+    function saveModalSchedule() {
+        const memberId = document.getElementById('modal-member-select').value;
+        const dateVal = document.getElementById('modal-date').value;
+        const hour = parseInt(document.getElementById('modal-hour').value);
+        const equipment = document.getElementById('modal-equipment').value;
+
+        const member = members.find(m => m.id === memberId);
+
+        if(!memberId || !member || !dateVal) {
+            alert('회원과 수업 일자를 지정해 주세요.');
+            return;
+        }
+
+        let existingLessonsCount = lessons.filter(l => l.memberId === memberId).length;
+
+        lessons.push({
+            id: Date.now() + Math.random().toString(),
+            memberId: member.id,
+            memberName: member.name,
+            dateStr: dateVal,
+            hour: hour,
+            status: '수업예정',
+            equipment: equipment,
+            lessonIndex: existingLessonsCount + 1
+        });
+
+        saveData();
+        alert(`${member.name} 회원님의 ${dateVal} ${hour}:00 수업이 추가되었습니다!`);
+        closeAddModal();
+        document.getElementById('schedule-date').value = dateVal;
+        renderSchedule();
     }
 
     function exportData() {
@@ -422,8 +485,9 @@
         });
     }
 
-    function populateMemberDropdown() {
-        const select = document.getElementById('auto-member-select');
+    function populateMemberDropdown(selectId) {
+        const select = document.getElementById(selectId);
+        if(!select) return;
         select.innerHTML = '<option value="">-- 회원을 선택하세요 --</option>';
         members.forEach(m => {
             select.innerHTML += `<option value="${m.id}">${m.name} (잔여: ${m.remaining}회 / 총: ${m.total}회)</option>`;
@@ -439,46 +503,6 @@
             renderMembers();
             alert(`${member.name} 회원님의 이용권이 10회 충전되었습니다.`);
         }
-    }
-
-    function handleScheduleCreation() {
-        if(createMode === 'single') {
-            addSingleSchedule();
-        } else {
-            generateAutoSchedules();
-        }
-    }
-
-    function addSingleSchedule() {
-        const memberId = document.getElementById('auto-member-select').value;
-        const dateVal = document.getElementById('auto-startdate').value;
-        const hour = parseInt(document.getElementById('auto-hour').value);
-        const equipment = document.getElementById('auto-equipment').value;
-
-        const member = members.find(m => m.id === memberId);
-
-        if(!memberId || !member || !dateVal) {
-            alert('회원과 수업 일자를 선택해 주세요.');
-            return;
-        }
-
-        let existingLessonsCount = lessons.filter(l => l.memberId === memberId).length;
-
-        lessons.push({
-            id: Date.now() + Math.random().toString(),
-            memberId: member.id,
-            memberName: member.name,
-            dateStr: dateVal,
-            hour: hour,
-            status: '수업예정',
-            equipment: equipment,
-            lessonIndex: existingLessonsCount + 1
-        });
-
-        saveData();
-        alert(`${member.name} 회원님의 ${dateVal} ${hour}:00 수업이 추가되었습니다!`);
-        document.getElementById('schedule-date').value = dateVal;
-        switchTab('schedule');
     }
 
     function generateAutoSchedules() {
@@ -590,7 +614,6 @@
         }
     }
 
-    // 1. 일별 보기 (이전날/다음날 이동 + 스와이프 적용)
     function renderDayView(dateStr, container) {
         const todaysLessons = lessons.filter(l => l.dateStr === dateStr);
         const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
@@ -631,7 +654,6 @@
         container.appendChild(swipeWrapper);
     }
 
-    // 2. 주별 보기 (이전주/다음주 이동 + 스와이프 적용)
     function renderWeekView(dateStr, container) {
         let curr = new Date(dateStr);
         let first = curr.getDate() - curr.getDay();
@@ -689,7 +711,6 @@
         container.appendChild(swipeWrapper);
     }
 
-    // 3. 월별 보기 (이전달/다음달 이동 + 스와이프 적용)
     function renderMonthView(dateStr, container) {
         let selectedDate = new Date(dateStr);
         let year = selectedDate.getFullYear();
@@ -753,13 +774,11 @@
         container.appendChild(card);
     }
 
-    // 터치 시작 위치 감지
     function handleTouchStart(e) {
         touchStartX = e.changedTouches[0].screenX;
         touchStartY = e.changedTouches[0].screenY;
     }
 
-    // 터치 종료 시 모드별(일/주/월) 스와이프 동작 수행
     function handleSwipeEnd(e, mode) {
         touchEndX = e.changedTouches[0].screenX;
         touchEndY = e.changedTouches[0].screenY;
@@ -767,22 +786,20 @@
         const deltaX = touchEndX - touchStartX;
         const deltaY = touchEndY - touchStartY;
 
-        // 세로 스크롤보다 가로 이동이 큰 경우에만 스와이프 판정
         if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 50) {
             if (mode === 'day') {
-                if (deltaX < 0) changeDate(1);  // 오른쪽->왼쪽 : 다음날
-                else changeDate(-1);           // 왼쪽->오른쪽 : 이전날
+                if (deltaX < 0) changeDate(1);
+                else changeDate(-1);
             } else if (mode === 'week') {
-                if (deltaX < 0) changeWeek(7);  // 오른쪽->왼쪽 : 다음주
-                else changeWeek(-7);           // 왼쪽->오른쪽 : 이전주
+                if (deltaX < 0) changeWeek(7);
+                else changeWeek(-7);
             } else if (mode === 'month') {
-                if (deltaX < 0) changeMonth(1); // 오른쪽->왼쪽 : 다음달
-                else changeMonth(-1);          // 왼쪽->오른쪽 : 이전달
+                if (deltaX < 0) changeMonth(1);
+                else changeMonth(-1);
             }
         }
     }
 
-    // 일 단위 이동
     function changeDate(days) {
         let currentDate = new Date(document.getElementById('schedule-date').value);
         currentDate.setDate(currentDate.getDate() + days);
@@ -790,7 +807,6 @@
         renderSchedule();
     }
 
-    // 주 단위 이동
     function changeWeek(days) {
         let currentDate = new Date(document.getElementById('schedule-date').value);
         currentDate.setDate(currentDate.getDate() + days);
@@ -798,7 +814,6 @@
         renderSchedule();
     }
 
-    // 월 단위 이동
     function changeMonth(offset) {
         let currentDate = new Date(document.getElementById('schedule-date').value);
         currentDate.setMonth(currentDate.getMonth() + offset);
