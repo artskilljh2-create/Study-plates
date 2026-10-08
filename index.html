@@ -212,7 +212,7 @@
     </div>
 </div>
 
-<!-- 1회 수업 추가 팝업 (모달) - 정식 레슨 & 비회원 체험 레슨 선택 가능 -->
+<!-- 1회 수업 추가 팝업 (모달) -->
 <div id="add-modal" class="modal-overlay">
     <div class="modal-content">
         <div class="modal-header">
@@ -228,7 +228,6 @@
             </select>
         </div>
 
-        <!-- 기존 회원 선택 -->
         <div class="form-group" id="group-member-select">
             <label>대상 회원 선택 *</label>
             <select id="modal-member-select">
@@ -236,7 +235,6 @@
             </select>
         </div>
 
-        <!-- 체험 고객 정보 직접 입력란 -->
         <div id="group-trial-inputs" style="display:none;">
             <div class="form-group">
                 <label>체험 고객 성함 *</label>
@@ -297,8 +295,21 @@
     document.getElementById('auto-startdate').valueAsDate = new Date();
 
     function saveData() {
+        // 모든 수업 회차(index) 자동 다시 계산
+        recalculateLessonIndexes();
         localStorage.setItem('pilates_members', JSON.stringify(members));
         localStorage.setItem('pilates_lessons', JSON.stringify(lessons));
+    }
+
+    // 회원의 전체 레슨 회차 자동 정렬 및 회차 번호 부여
+    function recalculateLessonIndexes() {
+        members.forEach(member => {
+            let mLessons = lessons.filter(l => l.memberId === member.id && !l.isTrial);
+            mLessons.sort((a,b) => (a.dateStr + a.hour).localeCompare(b.dateStr + b.hour));
+            mLessons.forEach((l, idx) => {
+                l.lessonIndex = idx + 1;
+            });
+        });
     }
 
     function switchTab(tab) {
@@ -345,7 +356,6 @@
         }
     }
 
-    /* 모달 제어 및 체험 레슨 폼 전환 */
     function openAddModal() {
         populateMemberDropdown('modal-member-select');
         const currentDateStr = document.getElementById('schedule-date').value;
@@ -373,6 +383,7 @@
         }
     }
 
+    /* 수동 1회 수업 추가 시: 뒤쪽 고정 스케줄 1회 자동 차감/조정 */
     function saveModalSchedule() {
         const type = document.getElementById('modal-type').value;
         const dateVal = document.getElementById('modal-date').value;
@@ -417,8 +428,11 @@
                 return;
             }
 
-            let existingLessonsCount = lessons.filter(l => l.memberId === memberId).length;
+            // 회원의 기존 '수업예정' 고정 레슨 목록 중 가장 마지막(미래) 레슨 찾기
+            let mFutureLessons = lessons.filter(l => l.memberId === member.id && !l.isTrial && l.status === '수업예정');
+            mFutureLessons.sort((a,b) => (a.dateStr + a.hour).localeCompare(b.dateStr + b.hour));
 
+            // 새 수업 추가
             lessons.push({
                 id: Date.now() + Math.random().toString(),
                 isTrial: false,
@@ -427,12 +441,20 @@
                 dateStr: dateVal,
                 hour: hour,
                 status: '수업예정',
-                equipment: equipment,
-                lessonIndex: existingLessonsCount + 1
+                equipment: equipment
             });
 
+            // 만약 보유 횟수 초과 방지를 위해 기존 고정 스케줄이 있다면 가장 마지막 스케줄 1회 제거
+            let totalMLessons = lessons.filter(l => l.memberId === member.id && !l.isTrial);
+            if (totalMLessons.length > member.total && mFutureLessons.length > 0) {
+                const lastLesson = mFutureLessons[mFutureLessons.length - 1];
+                lessons = lessons.filter(l => l.id !== lastLesson.id);
+                alert(`${member.name} 회원님의 1회 수업이 수동 추가되어, 가장 마지막 고정 스케줄(${lastLesson.dateStr}) 1회가 자동으로 차감/조정되었습니다.`);
+            } else {
+                alert(`${member.name} 회원님의 ${dateVal} ${hour}:00 수업이 추가되었습니다!`);
+            }
+
             saveData();
-            alert(`${member.name} 회원님의 ${dateVal} ${hour}:00 수업이 추가되었습니다!`);
         }
 
         closeAddModal();
@@ -440,7 +462,6 @@
         renderSchedule();
     }
 
-    /* 체험 고객을 정식 회원으로 바로 등록시키는 함수 */
     function convertTrialToMember(trialName, trialPhone, trialNote) {
         switchTab('members');
         document.getElementById('m-name').value = trialName;
@@ -608,12 +629,10 @@
 
         let currentDate = new Date(startDateVal);
         let createdCount = 0;
-        let existingLessonsCount = lessons.filter(l => l.memberId === memberId).length;
 
         while(createdCount < count) {
             let day = currentDate.getDay();
             if(selectedDays.includes(day)) {
-                existingLessonsCount++;
                 lessons.push({
                     id: Date.now() + Math.random().toString(),
                     isTrial: false,
@@ -622,8 +641,7 @@
                     dateStr: currentDate.toISOString().split('T')[0],
                     hour: hour,
                     status: '수업예정',
-                    equipment: equipment,
-                    lessonIndex: existingLessonsCount
+                    equipment: equipment
                 });
                 createdCount++;
             }
@@ -635,6 +653,7 @@
         switchTab('schedule');
     }
 
+    /* 고정 스케줄 수동 삭제 시: 남은 이용권에 맞게 가장 마지막 날짜 뒤로 1회 연장 자동 생성 */
     function deleteLesson(lessonId) {
         const lesson = lessons.find(l => l.id === lessonId);
         if(!lesson) return;
@@ -648,16 +667,32 @@
             return;
         }
 
-        if(confirm(`${lesson.dateStr} ${lesson.hour}:00 ${lesson.memberName} 회원님의 수업을 취소/삭제하시겠습니까?\n(횟수는 차감되지 않으며, 다음 주 동일 요일에 1회 수업이 자동 연장 추가됩니다.)`)) {
+        if(confirm(`${lesson.dateStr} ${lesson.hour}:00 ${lesson.memberName} 회원님의 수업을 취소/삭제하시겠습니까?\n(횟수는 유지되며, 가장 마지막 고정 수업일 다음 주 동일 요일에 1회 수업이 자동 연장 추가됩니다.)`)) {
             const member = members.find(m => m.id === lesson.memberId);
             
+            // 이미 출석/결석(차감)되었던 수업을 삭제하는 경우에는 차감되었던 횟수 복구
             if((lesson.status === '출석' || lesson.status === '결석(차감)') && member) {
                 member.remaining++;
             }
 
-            let d = new Date(lesson.dateStr);
-            d.setDate(d.getDate() + 7);
-            const newDateStr = d.toISOString().split('T')[0];
+            // 해당 회원의 전체 수업 목록 중 가장 마지막 레슨 찾기
+            let mLessons = lessons.filter(l => l.memberId === lesson.memberId && !l.isTrial);
+            mLessons.sort((a,b) => (a.dateStr + a.hour).localeCompare(b.dateStr + b.hour));
+            
+            let lastDateObj = new Date(lesson.dateStr);
+            let lastHour = lesson.hour;
+            let lastEquipment = lesson.equipment;
+
+            if (mLessons.length > 0) {
+                const lastLesson = mLessons[mLessons.length - 1];
+                lastDateObj = new Date(lastLesson.dateStr);
+                lastHour = lastLesson.hour;
+                lastEquipment = lastLesson.equipment;
+            }
+
+            // 가장 마지막 레슨 날짜로부터 7일 뒤(다음 주 동일 요일)에 1회 레슨 자동 추가
+            lastDateObj.setDate(lastDateObj.getDate() + 7);
+            const newDateStr = lastDateObj.toISOString().split('T')[0];
 
             lessons.push({
                 id: Date.now() + Math.random().toString(),
@@ -665,16 +700,16 @@
                 memberId: lesson.memberId,
                 memberName: lesson.memberName,
                 dateStr: newDateStr,
-                hour: lesson.hour,
+                hour: lastHour,
                 status: '수업예정',
-                equipment: lesson.equipment,
-                lessonIndex: lesson.lessonIndex
+                equipment: lastEquipment
             });
 
+            // 현재 선택한 스케줄 삭제
             lessons = lessons.filter(l => l.id !== lessonId);
             
             saveData();
-            alert(`수업이 취소되었습니다. 횟수 차감 없이 다음 주(${newDateStr})로 1회 수업이 자동 연장 추가되었습니다.`);
+            alert(`수업이 취소되었습니다. 이용권 횟수 손실 없이 마지막 고정일 다음 주(${newDateStr})로 1회 수업이 자동 연장 추가되었습니다.`);
             renderSchedule();
         }
     }
@@ -937,7 +972,6 @@
 
         const dayText = dayOfWeek ? `(${dayOfWeek}) ` : '';
 
-        // 1회 체험 레슨 전용 카드 구성
         if (lesson.isTrial) {
             div.innerHTML = `
                 <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -959,7 +993,6 @@
             return div;
         }
 
-        // 기존 회원 정식 수업 카드 구성
         const member = members.find(m => m.id === lesson.memberId);
         const remaining = member ? member.remaining : 0;
         const total = member ? member.total : 0;
