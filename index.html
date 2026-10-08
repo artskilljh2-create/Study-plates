@@ -17,6 +17,10 @@
         .tab-btn { flex: 1; padding: 12px 4px; border: none; background: none; font-size: 12px; font-weight: 600; color: #8e8e93; cursor: pointer; text-align: center; }
         .tab-btn.active { color: #007aff; border-bottom: 2px solid #007aff; }
 
+        .sub-nav-tabs { display: flex; gap: 8px; margin-bottom: 14px; background: #e5e5ea; padding: 4px; border-radius: 8px; }
+        .sub-tab-btn { flex: 1; padding: 8px; border: none; background: none; border-radius: 6px; font-size: 13px; font-weight: 600; color: #6c6c70; cursor: pointer; text-align: center; }
+        .sub-tab-btn.active { background: #ffffff; color: #000000; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+
         .view-modes { display: flex; gap: 6px; margin-bottom: 14px; background: #e5e5ea; padding: 4px; border-radius: 8px; }
         .view-btn { flex: 1; padding: 6px; border: none; background: none; border-radius: 6px; font-size: 13px; font-weight: 600; color: #6c6c70; cursor: pointer; text-align: center; }
         .view-btn.active { background: #ffffff; color: #000000; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
@@ -27,6 +31,8 @@
         .card-clickable:active { background-color: #f2f2f7; }
 
         .date-picker { width: 100%; padding: 10px; font-size: 16px; border: 1px solid #c7c7cc; border-radius: 8px; margin-bottom: 14px; background: #fff; }
+        .search-input { width: 100%; padding: 10px 12px; font-size: 14px; border: 1px solid #c7c7cc; border-radius: 8px; margin-bottom: 14px; background: #fff; }
+
         .btn { background: #007aff; color: white; border: none; padding: 10px 16px; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%; font-size: 15px; }
         .btn-danger { background: #ff3b30; }
         .btn-success { background: #34c759; }
@@ -105,32 +111,45 @@
 
     <!-- 2. 회원 관리 탭 -->
     <div id="tab-members" style="display: none;">
-        <div class="card">
-            <h3>➕ 신규 회원 등록</h3>
-            <div class="form-group">
-                <label>회원 이름 *</label>
-                <input type="text" id="m-name" placeholder="예: 홍길동">
-            </div>
-            <div class="form-group">
-                <label>전화번호</label>
-                <input type="tel" id="m-phone" placeholder="010-0000-0000">
-            </div>
-            <div class="form-group">
-                <label>등록 횟수 (이용권)</label>
-                <input type="number" id="m-credits" value="20">
-            </div>
-            <div class="form-group">
-                <label>담당 강사</label>
-                <input type="text" id="m-teacher" placeholder="예: 오수지 원장님">
-            </div>
-            <div class="form-group">
-                <label>회원 특이사항 / 체형 및 통증 메모</label>
-                <textarea id="m-note" placeholder="예: 측만증 있음, L4-L5 디스크 주의, 오른쪽 어깨 임핑지먼트"></textarea>
-            </div>
-            <button class="btn" onclick="addNewMember()">회원 등록 완료</button>
+        <!-- 회원 관리 서브탭 -->
+        <div class="sub-nav-tabs">
+            <button class="sub-tab-btn active" id="sub-btn-new" onclick="switchMemberSubTab('new')">➕ 신규회원 등록</button>
+            <button class="sub-tab-btn" id="sub-btn-list" onclick="switchMemberSubTab('list')">👥 기존회원 목록</button>
         </div>
 
-        <div id="member-list"></div>
+        <!-- 2-1. 신규회원 등록 서브 서면 -->
+        <div id="sub-member-new">
+            <div class="card">
+                <h3>➕ 신규 회원 등록</h3>
+                <div class="form-group">
+                    <label>회원 이름 *</label>
+                    <input type="text" id="m-name" placeholder="예: 홍길동">
+                </div>
+                <div class="form-group">
+                    <label>전화번호</label>
+                    <input type="tel" id="m-phone" placeholder="010-0000-0000">
+                </div>
+                <div class="form-group">
+                    <label>등록 횟수 (이용권)</label>
+                    <input type="number" id="m-credits" value="20">
+                </div>
+                <div class="form-group">
+                    <label>담당 강사</label>
+                    <input type="text" id="m-teacher" placeholder="예: 오수지 원장님">
+                </div>
+                <div class="form-group">
+                    <label>회원 특이사항 / 체형 및 통증 메모</label>
+                    <textarea id="m-note" placeholder="예: 측만증 있음, L4-L5 디스크 주의, 오른쪽 어깨 임핑지먼트"></textarea>
+                </div>
+                <button class="btn" onclick="addNewMember()">회원 등록 완료</button>
+            </div>
+        </div>
+
+        <!-- 2-2. 기존회원 목록 서브 서면 (가나다순 & 검색 기능) -->
+        <div id="sub-member-list" style="display: none;">
+            <input type="text" id="member-search-input" class="search-input" placeholder="🔍 회원 이름으로 검색..." onkeyup="renderMembers()">
+            <div id="member-list"></div>
+        </div>
     </div>
 
     <!-- 3. 스케줄 관리 탭 -->
@@ -198,7 +217,7 @@
 
         <!-- 회원 고정 스케줄 내역 영역 -->
         <div class="card">
-            <div style="display:flex; justify-content:space-between; align-align:center; margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                 <h3 style="margin:0;">📋 회원 고정 스케줄 내역</h3>
                 <button class="btn btn-warning btn-sm" onclick="syncAndRefreshSchedules()">🔄 스케줄 재적용 & 동기화</button>
             </div>
@@ -483,6 +502,22 @@
         }
     }
 
+    function switchMemberSubTab(subTab) {
+        document.getElementById('sub-btn-new').classList.remove('active');
+        document.getElementById('sub-btn-list').classList.remove('active');
+        document.getElementById('sub-member-new').style.display = 'none';
+        document.getElementById('sub-member-list').style.display = 'none';
+
+        if(subTab === 'new') {
+            document.getElementById('sub-btn-new').classList.add('active');
+            document.getElementById('sub-member-new').style.display = 'block';
+        } else if(subTab === 'list') {
+            document.getElementById('sub-btn-list').classList.add('active');
+            document.getElementById('sub-member-list').style.display = 'block';
+            renderMembers();
+        }
+    }
+
     function setViewMode(mode) {
         currentViewMode = mode;
         const btns = document.querySelectorAll('.view-btn');
@@ -615,6 +650,7 @@
 
     function convertTrialToMember(trialName, trialPhone, trialNote) {
         switchTab('members');
+        switchMemberSubTab('new');
         document.getElementById('m-name').value = trialName;
         document.getElementById('m-phone').value = trialPhone !== '연락처 미입력' ? trialPhone : '';
         document.getElementById('m-note').value = trialNote;
@@ -704,7 +740,7 @@
         document.getElementById('m-phone').value = '';
         document.getElementById('m-note').value = '';
         
-        switchTab('members');
+        switchMemberSubTab('list');
     }
 
     function deleteMember(memberId) {
@@ -720,16 +756,34 @@
         }
     }
 
+    /* 기존 회원 목록 렌더링 (가나다순 정렬 및 이름 검색) */
     function renderMembers() {
         const div = document.getElementById('member-list');
-        div.innerHTML = '<h3>Registered Members (' + members.length + '명)</h3>';
+        const searchText = (document.getElementById('member-search-input')?.value || '').trim().toLowerCase();
+        
+        div.innerHTML = '';
 
         if(members.length === 0) {
-            div.innerHTML += '<p style="text-align:center; color:#8e8e93; padding:20px;">등록된 회원이 없습니다.</p>';
+            div.innerHTML = '<p style="text-align:center; color:#8e8e93; padding:20px;">등록된 회원이 없습니다.</p>';
             return;
         }
 
-        members.forEach(m => {
+        // 한글 가나다순 정렬
+        let sortedMembers = [...members].sort((a, b) => a.name.localeCompare(b.name, 'ko-KR'));
+
+        // 이름 검색 필터링
+        if (searchText) {
+            sortedMembers = sortedMembers.filter(m => m.name.toLowerCase().includes(searchText));
+        }
+
+        div.innerHTML = `<h3 style="margin-top:0; margin-bottom:12px;">Registered Members (${sortedMembers.length}명)</h3>`;
+
+        if (sortedMembers.length === 0) {
+            div.innerHTML += '<p style="text-align:center; color:#8e8e93; padding:20px;">검색 결과가 없습니다.</p>';
+            return;
+        }
+
+        sortedMembers.forEach(m => {
             div.innerHTML += `
                 <div class="card">
                     <span class="delete-icon" onclick="deleteMember('${m.id}')">삭제</span>
@@ -771,7 +825,10 @@
         const select = document.getElementById(selectId);
         if(!select) return;
         select.innerHTML = '<option value="">-- 회원을 선택하세요 --</option>';
-        members.forEach(m => {
+        
+        // 드롭다운 목록도 가나다순 정렬
+        let sortedMembers = [...members].sort((a, b) => a.name.localeCompare(b.name, 'ko-KR'));
+        sortedMembers.forEach(m => {
             select.innerHTML += `<option value="${m.id}">${m.name} (잔여: ${m.remaining}회 / 총: ${m.total}회)</option>`;
         });
     }
@@ -840,7 +897,10 @@
 
         const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
 
-        fixedRules.forEach(rule => {
+        // 고정 스케줄 내역 가나다순 정렬
+        let sortedRules = [...fixedRules].sort((a,b) => a.memberName.localeCompare(b.memberName, 'ko-KR'));
+
+        sortedRules.forEach(rule => {
             const dayTextStr = rule.days.map(d => dayNames[d]).join(', ');
             div.innerHTML += `
                 <div class="card card-clickable" style="margin-bottom:10px; border:1px solid #e5e5ea;" onclick="openEditRuleModal('${rule.memberId}')">
@@ -904,16 +964,13 @@
         const newHour = parseInt(document.getElementById('edit-rule-hour').value);
         const newEquipment = document.getElementById('edit-rule-equipment').value;
 
-        // 규칙 업데이트
         rule.days = [...editSelectedDays];
         rule.hour = newHour;
         rule.equipment = newEquipment;
 
-        // 오늘 이후 미진행 예정 수업 일괄 제거 후 새 규칙으로 재생성
         let todayStr = new Date().toISOString().split('T')[0];
         lessons = lessons.filter(l => !(l.memberId === memberId && l.status === '수업예정' && l.dateStr >= todayStr));
 
-        // 남은 잔여 횟수만큼 새 패턴으로 생성
         let scheduledLessons = lessons.filter(l => l.memberId === memberId && l.status === '수업예정');
         let neededCount = member.remaining - scheduledLessons.length;
 
