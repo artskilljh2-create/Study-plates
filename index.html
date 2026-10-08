@@ -27,7 +27,6 @@
         .btn { background: #007aff; color: white; border: none; padding: 10px 16px; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%; font-size: 15px; }
         .btn-danger { background: #ff3b30; }
         .btn-success { background: #34c759; }
-        .btn-warning { background: #ff9500; }
         .btn-secondary { background: #8e8e93; }
         .btn-sm { width: auto; padding: 6px 10px; font-size: 12px; }
         
@@ -35,7 +34,6 @@
         .badge-scheduled { background: #e5f1ff; color: #007aff; }
         .badge-attended { background: #e4f7e8; color: #34c759; }
         .badge-absent { background: #ffe5e5; color: #ff3b30; }
-        .badge-postponed { background: #fff3e5; color: #ff9500; }
 
         .form-group { margin-bottom: 14px; }
         .form-group label { display: block; font-size: 13px; color: #6c6c70; margin-bottom: 4px; font-weight: 600; }
@@ -54,7 +52,7 @@
 
         .member-memo { font-size: 12px; color: #8e8e93; background: #f8f9fa; padding: 8px; border-radius: 6px; margin-top: 6px; border-left: 3px solid #007aff; }
         .delete-icon { position: absolute; top: 14px; right: 14px; color: #ff3b30; cursor: pointer; font-size: 12px; font-weight: bold; border: 1px solid #ff3b30; padding: 2px 6px; border-radius: 4px; }
-        .lesson-delete-btn { color: #8e8e93; cursor: pointer; font-size: 12px; border: 1px solid #e5e5ea; padding: 2px 6px; border-radius: 4px; }
+        .lesson-delete-btn { color: #8e8e93; cursor: pointer; font-size: 12px; border: 1px solid #e5e5ea; padding: 2px 6px; border-radius: 4px; margin-left: 4px; }
         .lesson-delete-btn:hover { color: #ff3b30; border-color: #ff3b30; }
 
         .sub-type-tabs { display: flex; gap: 8px; margin-bottom: 14px; }
@@ -514,17 +512,40 @@
         switchTab('schedule');
     }
 
+    // 수업 삭제 시 횟수 차감 없이 다음 주로 1회 자동 추가
     function deleteLesson(lessonId) {
         const lesson = lessons.find(l => l.id === lessonId);
         if(!lesson) return;
 
-        if(confirm(`${lesson.dateStr} ${lesson.hour}:00 ${lesson.memberName} 회원님의 수업을 삭제하시겠습니까?`)) {
-            if(lesson.status === '출석' || lesson.status === '결석(차감)') {
-                const member = members.find(m => m.id === lesson.memberId);
-                if(member) member.remaining++;
+        if(confirm(`${lesson.dateStr} ${lesson.hour}:00 ${lesson.memberName} 회원님의 수업을 취소/삭제하시겠습니까?\n(횟수는 차감되지 않으며, 다음 주 동일 요일에 1회 수업이 자동 연장 추가됩니다.)`)) {
+            const member = members.find(m => m.id === lesson.memberId);
+            
+            // 이미 출석/결석(차감)되었던 수업을 삭제하는 경우에는 차감되었던 횟수를 원복
+            if((lesson.status === '출석' || lesson.status === '결석(차감)') && member) {
+                member.remaining++;
             }
+
+            // 삭제된 날짜로부터 7일 뒤(다음 주) 날짜 계산 후 레슨 1회 자동 생성
+            let d = new Date(lesson.dateStr);
+            d.setDate(d.getDate() + 7);
+            const newDateStr = d.toISOString().split('T')[0];
+
+            lessons.push({
+                id: Date.now() + Math.random().toString(),
+                memberId: lesson.memberId,
+                memberName: lesson.memberName,
+                dateStr: newDateStr,
+                hour: lesson.hour,
+                status: '수업예정',
+                equipment: lesson.equipment,
+                lessonIndex: lesson.lessonIndex
+            });
+
+            // 기존 수업 삭제
             lessons = lessons.filter(l => l.id !== lessonId);
+            
             saveData();
+            alert(`수업이 취소되었습니다. 횟수 차감 없이 다음 주(${newDateStr})로 1회 수업이 자동 연장 추가되었습니다.`);
             renderSchedule();
         }
     }
@@ -620,7 +641,6 @@
         }
     }
 
-    // 3. 월별 보기 (시간 순 정렬 기능 반영)
     function renderMonthView(dateStr, container) {
         let selectedDate = new Date(dateStr);
         let year = selectedDate.getFullYear();
@@ -648,7 +668,6 @@
             let currentStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             let dayLessons = lessons.filter(l => l.dateStr === currentStr);
             
-            // ★ 시간(hour) 순으로 정렬
             dayLessons.sort((a, b) => a.hour - b.hour);
 
             let isToday = (currentStr === todayStr) ? 'today' : '';
@@ -680,7 +699,6 @@
         let badgeClass = 'badge-scheduled';
         if(lesson.status === '출석') badgeClass = 'badge-attended';
         if(lesson.status === '결석(차감)') badgeClass = 'badge-absent';
-        if(lesson.status === '수업 넘기기') badgeClass = 'badge-postponed';
 
         let div = document.createElement('div');
         div.className = isCompact ? '' : 'card';
@@ -705,7 +723,6 @@
             <div style="display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;">
                 <button class="btn btn-sm btn-success" onclick="updateStatus('${lesson.id}', '출석')">🟢 출석</button>
                 <button class="btn btn-sm btn-danger" onclick="updateStatus('${lesson.id}', '결석(차감)')">🔴 당일취소(차감)</button>
-                <button class="btn btn-sm btn-warning" onclick="updateStatus('${lesson.id}', '수업 넘기기')">🟠 연기</button>
                 <button class="btn btn-sm btn-secondary" onclick="editLessonDateTime('${lesson.id}')">📅 날짜/시간 변경</button>
             </div>
         `;
@@ -722,32 +739,13 @@
         lesson.status = newStatus;
         const member = members.find(m => m.id === lesson.memberId);
 
-        if((newStatus === '출석' || newStatus === '결석(차감)') && (oldStatus === '수업예정' || oldStatus === '수업 넘기기')) {
+        if((newStatus === '출석' || newStatus === '결석(차감)') && oldStatus === '수업예정') {
             if(member && member.remaining > 0) {
                 member.remaining--;
             }
             if(newStatus === '결석(차감)' && member) {
                 member.absentCount = (member.absentCount || 0) + 1;
             }
-        }
-
-        if(newStatus === '수업 넘기기') {
-            if((oldStatus === '출석' || oldStatus === '결석(차감)') && member) {
-                member.remaining++;
-            }
-            let d = new Date(lesson.dateStr);
-            d.setDate(d.getDate() + 7);
-            lessons.push({
-                id: Date.now() + Math.random().toString(),
-                memberId: lesson.memberId,
-                memberName: lesson.memberName,
-                dateStr: d.toISOString().split('T')[0],
-                hour: lesson.hour,
-                status: '수업예정',
-                equipment: lesson.equipment,
-                lessonIndex: lesson.lessonIndex
-            });
-            alert('수업이 차감 없이 다음 주로 1회 연기 및 추가 생성되었습니다.');
         }
 
         saveData();
