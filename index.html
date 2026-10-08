@@ -28,12 +28,14 @@
         .btn-danger { background: #ff3b30; }
         .btn-success { background: #34c759; }
         .btn-secondary { background: #8e8e93; }
+        .btn-purple { background: #af52de; }
         .btn-sm { width: auto; padding: 6px 10px; font-size: 12px; }
         
         .badge { display: inline-block; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; }
         .badge-scheduled { background: #e5f1ff; color: #007aff; }
         .badge-attended { background: #e4f7e8; color: #34c759; }
         .badge-absent { background: #ffe5e5; color: #ff3b30; }
+        .badge-trial { background: #f3e8ff; color: #af52de; }
 
         .form-group { margin-bottom: 14px; }
         .form-group label { display: block; font-size: 13px; color: #6c6c70; margin-bottom: 4px; font-weight: 600; }
@@ -44,7 +46,6 @@
         .day-btn { flex: 1; padding: 8px 0; border: 1px solid #c7c7cc; border-radius: 6px; background: #f2f2f7; text-align: center; font-size: 13px; cursor: pointer; }
         .day-btn.selected { background: #007aff; color: white; border-color: #007aff; font-weight: bold; }
 
-        /* 터치 슬라이드 영역 스타일 */
         .swipe-container { touch-action: pan-y; }
         .nav-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
         .nav-title { font-weight: bold; font-size: 15px; color: #007aff; }
@@ -54,13 +55,15 @@
         .cal-day { min-height: 55px; background: #f9f9fb; border-radius: 6px; padding: 4px; font-size: 12px; border: 1px solid #e5e5ea; cursor: pointer; }
         .cal-day.today { border-color: #007aff; background: #e5f1ff; font-weight: bold; }
         .cal-dot { display: block; font-size: 10px; color: #007aff; margin-top: 2px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; text-align: left; }
+        .cal-dot.trial-dot { color: #af52de; font-weight: bold; }
 
         .member-memo { font-size: 12px; color: #8e8e93; background: #f8f9fa; padding: 8px; border-radius: 6px; margin-top: 6px; border-left: 3px solid #007aff; }
+        .trial-memo { font-size: 12px; color: #6b21a8; background: #faf5ff; padding: 8px; border-radius: 6px; margin-top: 6px; border-left: 3px solid #af52de; }
+        
         .delete-icon { position: absolute; top: 14px; right: 14px; color: #ff3b30; cursor: pointer; font-size: 12px; font-weight: bold; border: 1px solid #ff3b30; padding: 2px 6px; border-radius: 4px; }
         .lesson-delete-btn { color: #8e8e93; cursor: pointer; font-size: 12px; border: 1px solid #e5e5ea; padding: 2px 6px; border-radius: 4px; margin-left: 4px; }
         .lesson-delete-btn:hover { color: #ff3b30; border-color: #ff3b30; }
 
-        /* 모달 팝업 스타일 */
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); z-index: 1000; justify-content: center; align-items: center; }
         .modal-content { background: #fff; width: 90%; max-width: 450px; border-radius: 16px; padding: 20px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
         .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid #e5e5ea; padding-bottom: 10px; }
@@ -88,7 +91,6 @@
                 <button class="view-btn" onclick="setViewMode('week')">주별 보기</button>
                 <button class="view-btn" onclick="setViewMode('month')">월별 보기</button>
             </div>
-            <!-- 플러스 1회 수업 추가 버튼 -->
             <button class="btn btn-success btn-sm" style="padding: 9px 12px; font-size: 13px; font-weight: bold; white-space: nowrap;" onclick="openAddModal()">➕ 수업 추가</button>
         </div>
 
@@ -126,7 +128,7 @@
         <div id="member-list"></div>
     </div>
 
-    <!-- 3. 스케줄 생성 탭 (고정 연쇄 생성 전용) -->
+    <!-- 3. 고정 스케줄 생성 탭 -->
     <div id="tab-auto-schedule" style="display: none;">
         <div class="card">
             <h3>🔄 고정 요일 스케줄 연쇄 생성</h3>
@@ -210,19 +212,46 @@
     </div>
 </div>
 
-<!-- 1회 단기 수업 추가 팝업 (모달) -->
+<!-- 1회 수업 추가 팝업 (모달) - 정식 레슨 & 비회원 체험 레슨 선택 가능 -->
 <div id="add-modal" class="modal-overlay">
     <div class="modal-content">
         <div class="modal-header">
             <h3>📌 1회 수업 추가</h3>
             <button class="close-btn" onclick="closeAddModal()">✕</button>
         </div>
+
         <div class="form-group">
+            <label>수업 구분을 선택하세요 *</label>
+            <select id="modal-type" onchange="toggleGuestInput()">
+                <option value="member">기존 회원 레슨</option>
+                <option value="trial">🧪 비회원 1회 체험 레슨</option>
+            </select>
+        </div>
+
+        <!-- 기존 회원 선택 -->
+        <div class="form-group" id="group-member-select">
             <label>대상 회원 선택 *</label>
             <select id="modal-member-select">
                 <option value="">-- 회원을 선택하세요 --</option>
             </select>
         </div>
+
+        <!-- 체험 고객 정보 직접 입력란 -->
+        <div id="group-trial-inputs" style="display:none;">
+            <div class="form-group">
+                <label>체험 고객 성함 *</label>
+                <input type="text" id="modal-trial-name" placeholder="예: 김체험">
+            </div>
+            <div class="form-group">
+                <label>체험 고객 전화번호</label>
+                <input type="tel" id="modal-trial-phone" placeholder="010-0000-0000">
+            </div>
+            <div class="form-group">
+                <label>체험 수업 특이사항 / 안내 메모</label>
+                <input type="text" id="modal-trial-note" placeholder="예: 메밀차 준비, 필라테스 입문자">
+            </div>
+        </div>
+
         <div class="form-group">
             <label>수업 일자 *</label>
             <input type="date" id="modal-date">
@@ -316,12 +345,13 @@
         }
     }
 
-    /* 팝업 모달 제어 함수 */
+    /* 모달 제어 및 체험 레슨 폼 전환 */
     function openAddModal() {
         populateMemberDropdown('modal-member-select');
-        // 현재 선택된 날짜로 기본값 세팅
         const currentDateStr = document.getElementById('schedule-date').value;
         document.getElementById('modal-date').value = currentDateStr;
+        document.getElementById('modal-type').value = 'member';
+        toggleGuestInput();
         document.getElementById('add-modal').style.display = 'flex';
     }
 
@@ -329,37 +359,94 @@
         document.getElementById('add-modal').style.display = 'none';
     }
 
+    function toggleGuestInput() {
+        const type = document.getElementById('modal-type').value;
+        const memberGroup = document.getElementById('group-member-select');
+        const trialGroup = document.getElementById('group-trial-inputs');
+
+        if(type === 'trial') {
+            memberGroup.style.display = 'none';
+            trialGroup.style.display = 'block';
+        } else {
+            memberGroup.style.display = 'block';
+            trialGroup.style.display = 'none';
+        }
+    }
+
     function saveModalSchedule() {
-        const memberId = document.getElementById('modal-member-select').value;
+        const type = document.getElementById('modal-type').value;
         const dateVal = document.getElementById('modal-date').value;
         const hour = parseInt(document.getElementById('modal-hour').value);
         const equipment = document.getElementById('modal-equipment').value;
 
-        const member = members.find(m => m.id === memberId);
-
-        if(!memberId || !member || !dateVal) {
-            alert('회원과 수업 일자를 지정해 주세요.');
+        if (!dateVal) {
+            alert('수업 일자를 선택해 주세요.');
             return;
         }
 
-        let existingLessonsCount = lessons.filter(l => l.memberId === memberId).length;
+        if (type === 'trial') {
+            const trialName = document.getElementById('modal-trial-name').value.trim();
+            const trialPhone = document.getElementById('modal-trial-phone').value.trim() || '연락처 미입력';
+            const trialNote = document.getElementById('modal-trial-note').value.trim();
 
-        lessons.push({
-            id: Date.now() + Math.random().toString(),
-            memberId: member.id,
-            memberName: member.name,
-            dateStr: dateVal,
-            hour: hour,
-            status: '수업예정',
-            equipment: equipment,
-            lessonIndex: existingLessonsCount + 1
-        });
+            if (!trialName) {
+                alert('체험 고객의 성함을 입력해 주세요.');
+                return;
+            }
 
-        saveData();
-        alert(`${member.name} 회원님의 ${dateVal} ${hour}:00 수업이 추가되었습니다!`);
+            lessons.push({
+                id: Date.now() + Math.random().toString(),
+                isTrial: true,
+                memberName: trialName,
+                phone: trialPhone,
+                note: trialNote || '1회 체험 레슨 고객',
+                dateStr: dateVal,
+                hour: hour,
+                status: '수업예정',
+                equipment: equipment
+            });
+
+            saveData();
+            alert(`🧪 ${trialName}님 1회 체험 레슨이 ${dateVal} ${hour}:00에 추가되었습니다!`);
+        } else {
+            const memberId = document.getElementById('modal-member-select').value;
+            const member = members.find(m => m.id === memberId);
+
+            if (!memberId || !member) {
+                alert('대상 회원을 선택해 주세요.');
+                return;
+            }
+
+            let existingLessonsCount = lessons.filter(l => l.memberId === memberId).length;
+
+            lessons.push({
+                id: Date.now() + Math.random().toString(),
+                isTrial: false,
+                memberId: member.id,
+                memberName: member.name,
+                dateStr: dateVal,
+                hour: hour,
+                status: '수업예정',
+                equipment: equipment,
+                lessonIndex: existingLessonsCount + 1
+            });
+
+            saveData();
+            alert(`${member.name} 회원님의 ${dateVal} ${hour}:00 수업이 추가되었습니다!`);
+        }
+
         closeAddModal();
         document.getElementById('schedule-date').value = dateVal;
         renderSchedule();
+    }
+
+    /* 체험 고객을 정식 회원으로 바로 등록시키는 함수 */
+    function convertTrialToMember(trialName, trialPhone, trialNote) {
+        switchTab('members');
+        document.getElementById('m-name').value = trialName;
+        document.getElementById('m-phone').value = trialPhone !== '연락처 미입력' ? trialPhone : '';
+        document.getElementById('m-note').value = trialNote;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     function exportData() {
@@ -529,6 +616,7 @@
                 existingLessonsCount++;
                 lessons.push({
                     id: Date.now() + Math.random().toString(),
+                    isTrial: false,
                     memberId: member.id,
                     memberName: member.name,
                     dateStr: currentDate.toISOString().split('T')[0],
@@ -551,6 +639,15 @@
         const lesson = lessons.find(l => l.id === lessonId);
         if(!lesson) return;
 
+        if (lesson.isTrial) {
+            if(confirm(`'${lesson.memberName}' 님의 체험 수업을 삭제하시겠습니까?`)) {
+                lessons = lessons.filter(l => l.id !== lessonId);
+                saveData();
+                renderSchedule();
+            }
+            return;
+        }
+
         if(confirm(`${lesson.dateStr} ${lesson.hour}:00 ${lesson.memberName} 회원님의 수업을 취소/삭제하시겠습니까?\n(횟수는 차감되지 않으며, 다음 주 동일 요일에 1회 수업이 자동 연장 추가됩니다.)`)) {
             const member = members.find(m => m.id === lesson.memberId);
             
@@ -564,6 +661,7 @@
 
             lessons.push({
                 id: Date.now() + Math.random().toString(),
+                isTrial: false,
                 memberId: lesson.memberId,
                 memberName: lesson.memberName,
                 dateStr: newDateStr,
@@ -754,7 +852,11 @@
 
             let isToday = (currentStr === todayStr) ? 'today' : '';
 
-            let lessonLabels = dayLessons.map(l => `<span class="cal-dot">• ${l.hour}시 ${l.memberName}</span>`).join('');
+            let lessonLabels = dayLessons.map(l => {
+                const dotClass = l.isTrial ? 'cal-dot trial-dot' : 'cal-dot';
+                const prefix = l.isTrial ? '🧪' : '•';
+                return `<span class="${dotClass}">${prefix} ${l.hour}시 ${l.memberName}</span>`;
+            }).join('');
 
             grid.innerHTML += `
                 <div class="cal-day ${isToday}" onclick="selectDateFromCal('${currentStr}')">
@@ -827,14 +929,6 @@
     }
 
     function createLessonCard(lesson, isCompact = false, dayOfWeek = '') {
-        const member = members.find(m => m.id === lesson.memberId);
-        const remaining = member ? member.remaining : 0;
-        const total = member ? member.total : 0;
-
-        let badgeClass = 'badge-scheduled';
-        if(lesson.status === '출석') badgeClass = 'badge-attended';
-        if(lesson.status === '결석(차감)') badgeClass = 'badge-absent';
-
         let div = document.createElement('div');
         div.className = isCompact ? '' : 'card';
         if(isCompact) div.style.borderTop = '1px solid #f2f2f7';
@@ -842,6 +936,37 @@
         if(isCompact) div.style.marginTop = '6px';
 
         const dayText = dayOfWeek ? `(${dayOfWeek}) ` : '';
+
+        // 1회 체험 레슨 전용 카드 구성
+        if (lesson.isTrial) {
+            div.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h4 style="margin:4px 0; color:#6b21a8;">${lesson.hour}:00 ${dayText}- ${lesson.memberName} 님</h4>
+                    <div>
+                        <span class="badge badge-trial">🧪 1회 체험</span>
+                        <span class="lesson-delete-btn" onclick="deleteLesson('${lesson.id}')" title="수업 삭제">🗑️</span>
+                    </div>
+                </div>
+                <div style="font-size:12px; color:#6c6c70; margin: 2px 0 4px 0;">
+                    📞 ${lesson.phone} | 기구: ${lesson.equipment || '기본'}
+                </div>
+                <div class="trial-memo">💡 <b>체험 메모:</b> ${lesson.note}</div>
+                <div style="display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;">
+                    <button class="btn btn-sm btn-purple" onclick="convertTrialToMember('${lesson.memberName}', '${lesson.phone}', '${lesson.note}')">👤 정식 회원 등록</button>
+                    <button class="btn btn-sm btn-secondary" onclick="editLessonDateTime('${lesson.id}')">📅 날짜/시간 변경</button>
+                </div>
+            `;
+            return div;
+        }
+
+        // 기존 회원 정식 수업 카드 구성
+        const member = members.find(m => m.id === lesson.memberId);
+        const remaining = member ? member.remaining : 0;
+        const total = member ? member.total : 0;
+
+        let badgeClass = 'badge-scheduled';
+        if(lesson.status === '출석') badgeClass = 'badge-attended';
+        if(lesson.status === '결석(차감)') badgeClass = 'badge-absent';
 
         div.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:center;">
