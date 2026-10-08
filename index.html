@@ -79,7 +79,7 @@
 <div class="nav-tabs">
     <button class="tab-btn active" onclick="switchTab('schedule')">📅 스케줄 보기</button>
     <button class="tab-btn" onclick="switchTab('members')">👤 회원 관리</button>
-    <button class="tab-btn" onclick="switchTab('auto-schedule')">⚡ 고정 스케줄 생성</button>
+    <button class="tab-btn" onclick="switchTab('auto-schedule')">⚡ 고정 스케줄 관리</button>
     <button class="tab-btn" onclick="switchTab('backup')">💾 백업/복원</button>
 </div>
 
@@ -130,10 +130,10 @@
         <div id="member-list"></div>
     </div>
 
-    <!-- 3. 고정 스케줄 생성 탭 -->
+    <!-- 3. 고정 스케줄 생성 및 관리 탭 -->
     <div id="tab-auto-schedule" style="display: none;">
         <div class="card">
-            <h3>🔄 고정 요일 스케줄 연쇄 생성</h3>
+            <h3>🔄 고정 요일 스케줄 생성</h3>
 
             <div class="form-group">
                 <label>대상 회원 선택 *</label>
@@ -188,6 +188,18 @@
             </div>
 
             <button class="btn btn-success" onclick="generateAutoSchedules()">고정 스케줄 연쇄 생성하기</button>
+        </div>
+
+        <!-- 고정 스케줄 등록 목록 및 삭제/수정 카드 -->
+        <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <h3 style="margin:0;">📋 회원의 고정 스케줄 내역</h3>
+                <button class="btn btn-warning btn-sm" onclick="syncAndRefreshSchedules()">🔄 스케줄 재적용 & 동기화</button>
+            </div>
+            <p style="font-size:12px; color:#6c6c70; margin-top:0;">
+                고정 요일을 변경하거나 삭제한 후 상단의 <b>[🔄 스케줄 재적용 & 동기화]</b> 버튼을 누르면 달력에 즉시 재반영됩니다.
+            </p>
+            <div id="fixed-schedule-list"></div>
         </div>
     </div>
 
@@ -284,6 +296,7 @@
 <script>
     let members = JSON.parse(localStorage.getItem('pilates_members')) || [];
     let lessons = JSON.parse(localStorage.getItem('pilates_lessons')) || [];
+    let fixedRules = JSON.parse(localStorage.getItem('pilates_fixed_rules')) || [];
 
     let selectedDays = [2, 4];
     let currentViewMode = 'day';
@@ -300,6 +313,7 @@
         recalculateLessonIndexes();
         localStorage.setItem('pilates_members', JSON.stringify(members));
         localStorage.setItem('pilates_lessons', JSON.stringify(lessons));
+        localStorage.setItem('pilates_fixed_rules', JSON.stringify(fixedRules));
     }
 
     function recalculateLessonIndexes() {
@@ -312,46 +326,41 @@
         });
     }
 
-    /* 회원의 고정 요일 패턴(화, 목 등)을 분석하여 부족한 스케줄을 교대 순서에 맞게 연장 생성 */
     function extendFixedSchedulesForMember(memberId, countNeeded) {
         let mLessons = lessons.filter(l => l.memberId === memberId && !l.isTrial);
-        if (mLessons.length === 0 || countNeeded <= 0) return 0;
+        if (countNeeded <= 0) return 0;
 
-        mLessons.sort((a,b) => (a.dateStr + a.hour).localeCompare(b.dateStr + b.hour));
+        // 회원의 고정 스케줄 규칙 가져오기
+        let rule = fixedRules.find(r => r.memberId === memberId);
+        let targetDays = rule ? rule.days : [2, 4];
+        let hour = rule ? rule.hour : 10;
+        let equipment = rule ? rule.equipment : '리포머/타워';
 
-        // 기존 레슨들에서 고정 요일(0~6)과 해당 요일의 시간대, 기구 정보 수집
-        let dayPatternMap = {};
-        mLessons.forEach(l => {
-            let dayNum = new Date(l.dateStr).getDay();
-            if (!dayPatternMap[dayNum]) {
-                dayPatternMap[dayNum] = { hour: l.hour, equipment: l.equipment };
-            }
-        });
-
-        let targetDays = Object.keys(dayPatternMap).map(Number).sort((a,b) => a - b);
-        if (targetDays.length === 0) return 0;
-
-        let lastLesson = mLessons[mLessons.length - 1];
-        let currentPointerDate = new Date(lastLesson.dateStr);
+        let currentPointerDate = new Date();
+        if (mLessons.length > 0) {
+            mLessons.sort((a,b) => (a.dateStr + a.hour).localeCompare(b.dateStr + b.hour));
+            currentPointerDate = new Date(mLessons[mLessons.length - 1].dateStr);
+        }
 
         let createdCount = 0;
+        const member = members.find(m => m.id === memberId);
+
         while (createdCount < countNeeded) {
             currentPointerDate.setDate(currentPointerDate.getDate() + 1);
             let currentDayNum = currentPointerDate.getDay();
 
             if (targetDays.includes(currentDayNum)) {
-                let patternInfo = dayPatternMap[currentDayNum];
                 let newDateStr = currentPointerDate.toISOString().split('T')[0];
 
                 lessons.push({
                     id: Date.now() + Math.random().toString(),
                     isTrial: false,
                     memberId: memberId,
-                    memberName: mLessons[0].memberName,
+                    memberName: member ? member.name : '',
                     dateStr: newDateStr,
-                    hour: patternInfo.hour,
+                    hour: hour,
                     status: '수업예정',
-                    equipment: patternInfo.equipment
+                    equipment: equipment
                 });
                 createdCount++;
             }
@@ -359,7 +368,6 @@
         return createdCount;
     }
 
-    // 잔여 횟수와 스케줄표 동기화 실행
     function syncAndRefreshSchedules() {
         let addedTotalCount = 0;
 
@@ -377,11 +385,12 @@
 
         saveData();
         renderSchedule();
+        renderFixedSchedules();
 
         if (addedTotalCount > 0) {
-            alert(`회원님의 화·목 등 고정 요일 순서에 맞춰 부족했던 스케줄 ${addedTotalCount}개가 정확하게 동기화 추가되었습니다!`);
+            alert(`부족했던 고정 스케줄 ${addedTotalCount}개가 회원님의 설정된 요일 패턴에 맞춰 동기화 반영되었습니다!`);
         } else {
-            alert("모든 회원의 잔여 횟수와 고정 스케줄표가 정확히 동기화되어 있습니다.");
+            alert("모든 회원의 잔여 횟수와 스케줄표가 정확히 일치합니다.");
         }
     }
 
@@ -404,6 +413,7 @@
             document.querySelectorAll('.tab-btn')[2].classList.add('active');
             document.getElementById('tab-auto-schedule').style.display = 'block';
             populateMemberDropdown('auto-member-select');
+            renderFixedSchedules();
         } else if(tab === 'backup') {
             document.querySelectorAll('.tab-btn')[3].classList.add('active');
             document.getElementById('tab-backup').style.display = 'block';
@@ -543,6 +553,7 @@
         const data = {
             members: members,
             lessons: lessons,
+            fixedRules: fixedRules,
             exportDate: new Date().toLocaleString()
         };
         const jsonStr = JSON.stringify(data, null, 2);
@@ -575,6 +586,7 @@
                     if (confirm("기존 데이터에 파일의 데이터를 덮어씌우시겠습니까?")) {
                         members = data.members;
                         lessons = data.lessons;
+                        fixedRules = data.fixedRules || [];
                         saveData();
                         alert("데이터가 성공적으로 복원되었습니다!");
                         switchTab('schedule');
@@ -630,6 +642,7 @@
         if(confirm(`'${member.name}' 회원님과 해당 회원의 모든 예약 스케줄을 삭제하시겠습니까?`)) {
             members = members.filter(m => m.id !== memberId);
             lessons = lessons.filter(l => l.memberId !== memberId);
+            fixedRules = fixedRules.filter(r => r.memberId !== memberId);
             saveData();
             renderMembers();
         }
@@ -691,6 +704,7 @@
         });
     }
 
+    /* 고정 스케줄 규칙 등록 및 생성 */
     function generateAutoSchedules() {
         const memberId = document.getElementById('auto-member-select').value;
         const count = parseInt(document.getElementById('auto-count').value);
@@ -704,6 +718,18 @@
             alert('회원, 시작일자, 요일을 모두 바르게 선택해 주세요.');
             return;
         }
+
+        // 고정 요일 규칙 저장 (중복 시 업데이트)
+        fixedRules = fixedRules.filter(r => r.memberId !== memberId);
+        fixedRules.push({
+            id: Date.now().toString(),
+            memberId: member.id,
+            memberName: member.name,
+            days: [...selectedDays],
+            hour: hour,
+            equipment: equipment,
+            startDate: startDateVal
+        });
 
         let currentDate = new Date(startDateVal);
         let createdCount = 0;
@@ -727,11 +753,73 @@
         }
 
         saveData();
-        alert(`${member.name} 회원님의 ${count}회 고정 스케줄이 자동 생성되었습니다!`);
+        alert(`${member.name} 회원님의 고정 요일 규칙 등록 및 ${count}회 스케줄 생성이 완료되었습니다!`);
+        renderFixedSchedules();
         switchTab('schedule');
     }
 
-    /* 고정 스케줄 수동 삭제 시 화목 고정 순서에 맞춰 1회 연장 자동 생성 */
+    /* 회원의 등록된 고정 스케줄 내역 렌더링 */
+    function renderFixedSchedules() {
+        const div = document.getElementById('fixed-schedule-list');
+        div.innerHTML = '';
+
+        if (fixedRules.length === 0) {
+            div.innerHTML = '<p style="text-align:center; color:#8e8e93; padding:10px;">등록된 고정 스케줄 규칙이 없습니다.</p>';
+            return;
+        }
+
+        const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+
+        fixedRules.forEach(rule => {
+            const dayTextStr = rule.days.map(d => dayNames[d]).join(', ');
+            div.innerHTML += `
+                <div style="background:#f9f9fb; border:1px solid #e5e5ea; border-radius:8px; padding:12px; margin-bottom:8px; position:relative;">
+                    <div style="font-weight:bold; font-size:15px; color:#1c1c1e;">${rule.memberName} 회원님</div>
+                    <div style="font-size:13px; color:#007aff; margin-top:4px;">
+                        <b>고정 요일:</b> 매주 [${dayTextStr}] | <b>시간:</b> ${rule.hour}:00 | <b>기구:</b> ${rule.equipment}
+                    </div>
+                    <div style="display:flex; gap:6px; margin-top:8px; justify-content:flex-end;">
+                        <button class="btn btn-sm btn-secondary" onclick="editFixedRule('${rule.memberId}')">✏️ 요일/시간 수정</button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteFixedRule('${rule.memberId}')">🗑️ 고정 스케줄 삭제</button>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    /* 고정 스케줄 삭제 */
+    function deleteFixedRule(memberId) {
+        const rule = fixedRules.find(r => r.memberId === memberId);
+        if (!rule) return;
+
+        if (confirm(`'${rule.memberName}' 회원님의 고정 스케줄 규칙을 삭제하시겠습니까?\n(아직 진행되지 않은 미래의 고정 수업 스케줄이 일괄 취소됩니다.)`)) {
+            fixedRules = fixedRules.filter(r => r.memberId !== memberId);
+            
+            // 아직 출석하지 않은 미래의 예정 스케줄 일괄 삭제
+            let todayStr = new Date().toISOString().split('T')[0];
+            lessons = lessons.filter(l => !(l.memberId === memberId && l.status === '수업예정' && l.dateStr >= todayStr));
+
+            saveData();
+            renderFixedSchedules();
+            renderSchedule();
+            alert(`'${rule.memberName}' 회원님의 고정 스케줄 규칙 및 예정 스케줄이 삭제되었습니다.`);
+        }
+    }
+
+    /* 고정 스케줄 수정 */
+    function editFixedRule(memberId) {
+        const rule = fixedRules.find(r => r.memberId === memberId);
+        if (!rule) return;
+
+        const newHour = prompt(`[${rule.memberName} 회원님 고정 수업 시간 수정]\n변경할 고정 시간(시)을 입력하세요 (예: 9, 10, 14, 19):`, rule.hour);
+        if (!newHour) return;
+
+        rule.hour = parseInt(newHour);
+        saveData();
+        renderFixedSchedules();
+        alert("고정 수업 시간이 수정되었습니다. 상단의 [🔄 스케줄 재적용 & 동기화] 버튼을 누르면 달력에 즉시 반영됩니다.");
+    }
+
     function deleteLesson(lessonId) {
         const lesson = lessons.find(l => l.id === lessonId);
         if(!lesson) return;
@@ -752,10 +840,7 @@
                 member.remaining++;
             }
 
-            // 현재 선택한 스케줄 삭제
             lessons = lessons.filter(l => l.id !== lessonId);
-            
-            // 회원의 고정 패턴(화·목 등)에 맞춰 뒤쪽에 1회 자동 생성
             extendFixedSchedulesForMember(lesson.memberId, 1);
 
             saveData();
