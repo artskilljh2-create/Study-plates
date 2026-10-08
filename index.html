@@ -29,6 +29,7 @@
         .btn-success { background: #34c759; }
         .btn-secondary { background: #8e8e93; }
         .btn-purple { background: #af52de; }
+        .btn-warning { background: #ff9500; }
         .btn-sm { width: auto; padding: 6px 10px; font-size: 12px; }
         
         .badge { display: inline-block; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; }
@@ -85,13 +86,14 @@
 <div class="container">
     <!-- 1. 스케줄 보기 탭 -->
     <div id="tab-schedule">
-        <div style="display: flex; gap: 8px; margin-bottom: 14px; align-items: center;">
+        <div style="display: flex; gap: 6px; margin-bottom: 10px; align-items: center;">
             <div class="view-modes" style="flex: 1; margin-bottom: 0;">
                 <button class="view-btn active" onclick="setViewMode('day')">일별 보기</button>
                 <button class="view-btn" onclick="setViewMode('week')">주별 보기</button>
                 <button class="view-btn" onclick="setViewMode('month')">월별 보기</button>
             </div>
-            <button class="btn btn-success btn-sm" style="padding: 9px 12px; font-size: 13px; font-weight: bold; white-space: nowrap;" onclick="openAddModal()">➕ 수업 추가</button>
+            <button class="btn btn-warning btn-sm" style="padding: 9px 8px; font-size: 12px; font-weight: bold; white-space: nowrap;" onclick="syncAndRefreshSchedules()">🔄 스케줄 동기화</button>
+            <button class="btn btn-success btn-sm" style="padding: 9px 8px; font-size: 12px; font-weight: bold; white-space: nowrap;" onclick="openAddModal()">➕ 수업 추가</button>
         </div>
 
         <input type="date" id="schedule-date" class="date-picker" onchange="renderSchedule()">
@@ -295,13 +297,11 @@
     document.getElementById('auto-startdate').valueAsDate = new Date();
 
     function saveData() {
-        // 모든 수업 회차(index) 자동 다시 계산
         recalculateLessonIndexes();
         localStorage.setItem('pilates_members', JSON.stringify(members));
         localStorage.setItem('pilates_lessons', JSON.stringify(lessons));
     }
 
-    // 회원의 전체 레슨 회차 자동 정렬 및 회차 번호 부여
     function recalculateLessonIndexes() {
         members.forEach(member => {
             let mLessons = lessons.filter(l => l.memberId === member.id && !l.isTrial);
@@ -310,6 +310,54 @@
                 l.lessonIndex = idx + 1;
             });
         });
+    }
+
+    // 잔여 횟수와 고정 스케줄 개수 자동 수량 동기화 기능
+    function syncAndRefreshSchedules() {
+        let addedTotalCount = 0;
+
+        members.forEach(member => {
+            let mLessons = lessons.filter(l => l.memberId === member.id && !l.isTrial);
+            let activeLessons = mLessons.filter(l => l.status === '수업예정' || l.status === '출석' || l.status === '결석(차감)');
+            
+            // 현재 회원의 잔여 횟수에 비해 생성된 스케줄 수가 적을 경우 부족한 수만큼 고정 연장 추가
+            let missingCount = member.remaining - (mLessons.filter(l => l.status === '수업예정').length);
+
+            if (missingCount > 0 && mLessons.length > 0) {
+                mLessons.sort((a,b) => (a.dateStr + a.hour).localeCompare(b.dateStr + b.hour));
+                let lastLesson = mLessons[mLessons.length - 1];
+
+                let lastDateObj = new Date(lastLesson.dateStr);
+                let hour = lastLesson.hour;
+                let equipment = lastLesson.equipment;
+
+                for (let i = 0; i < missingCount; i++) {
+                    lastDateObj.setDate(lastDateObj.getDate() + 7);
+                    let newDateStr = lastDateObj.toISOString().split('T')[0];
+
+                    lessons.push({
+                        id: Date.now() + Math.random().toString(),
+                        isTrial: false,
+                        memberId: member.id,
+                        memberName: member.name,
+                        dateStr: newDateStr,
+                        hour: hour,
+                        status: '수업예정',
+                        equipment: equipment
+                    });
+                    addedTotalCount++;
+                }
+            }
+        });
+
+        saveData();
+        renderSchedule();
+
+        if (addedTotalCount > 0) {
+            alert(`총 ${addedTotalCount}개의 부족했던 고정 스케줄이 잔여 횟수에 맞게 자동으로 보충/동기화되었습니다!`);
+        } else {
+            alert("모든 회원의 잔여 횟수와 스케줄표가 정확히 일치합니다.");
+        }
     }
 
     function switchTab(tab) {
@@ -383,7 +431,6 @@
         }
     }
 
-    /* 수동 1회 수업 추가 시: 뒤쪽 고정 스케줄 1회 자동 차감/조정 */
     function saveModalSchedule() {
         const type = document.getElementById('modal-type').value;
         const dateVal = document.getElementById('modal-date').value;
@@ -428,11 +475,9 @@
                 return;
             }
 
-            // 회원의 기존 '수업예정' 고정 레슨 목록 중 가장 마지막(미래) 레슨 찾기
             let mFutureLessons = lessons.filter(l => l.memberId === member.id && !l.isTrial && l.status === '수업예정');
             mFutureLessons.sort((a,b) => (a.dateStr + a.hour).localeCompare(b.dateStr + b.hour));
 
-            // 새 수업 추가
             lessons.push({
                 id: Date.now() + Math.random().toString(),
                 isTrial: false,
@@ -444,7 +489,6 @@
                 equipment: equipment
             });
 
-            // 만약 보유 횟수 초과 방지를 위해 기존 고정 스케줄이 있다면 가장 마지막 스케줄 1회 제거
             let totalMLessons = lessons.filter(l => l.memberId === member.id && !l.isTrial);
             if (totalMLessons.length > member.total && mFutureLessons.length > 0) {
                 const lastLesson = mFutureLessons[mFutureLessons.length - 1];
@@ -586,11 +630,32 @@
                     </div>
                     <div class="member-memo">💡 <b>특이사항:</b> ${m.note}</div>
                     <div style="margin-top:10px; text-align:right;">
-                        <button class="btn btn-sm" onclick="recharge('${m.id}')">+10회 이용권 충전</button>
+                        <button class="btn btn-sm btn-purple" onclick="editMemberCredits('${m.id}')">✏️ 횟수 충전/수정</button>
                     </div>
                 </div>
             `;
         });
+    }
+
+    /* 자유로운 횟수 충전 및 잔여 횟수 수동 수정 모달/프롬프트 함수 */
+    function editMemberCredits(memberId) {
+        const member = members.find(m => m.id === memberId);
+        if(!member) return;
+
+        const choice = prompt(`[${member.name} 회원님 횟수 관리]\n\n1. 숫자를 입력하여 '추가 충전' (예: 10 입력 시 +10회 추가)\n2. 잔여 횟수 자체를 직접 변경하려는 경우 숫자를 입력하세요.\n\n현재 잔여 횟수: ${member.remaining}회 / 총 ${member.total}회\n\n추가 충전할 횟수를 입력하세요:`, "10");
+
+        if (choice !== null && choice.trim() !== "") {
+            const inputNum = parseInt(choice.trim());
+            if (!isNaN(inputNum)) {
+                member.total += inputNum;
+                member.remaining += inputNum;
+                saveData();
+                renderMembers();
+                alert(`${member.name} 회원님의 이용권이 ${inputNum}회 추가 충전되었습니다. (총 ${member.remaining}회)`);
+            } else {
+                alert("올바른 숫자를 입력해 주세요.");
+            }
+        }
     }
 
     function populateMemberDropdown(selectId) {
@@ -600,17 +665,6 @@
         members.forEach(m => {
             select.innerHTML += `<option value="${m.id}">${m.name} (잔여: ${m.remaining}회 / 총: ${m.total}회)</option>`;
         });
-    }
-
-    function recharge(memberId) {
-        const member = members.find(m => m.id === memberId);
-        if(member) {
-            member.total += 10;
-            member.remaining += 10;
-            saveData();
-            renderMembers();
-            alert(`${member.name} 회원님의 이용권이 10회 충전되었습니다.`);
-        }
     }
 
     function generateAutoSchedules() {
@@ -653,7 +707,6 @@
         switchTab('schedule');
     }
 
-    /* 고정 스케줄 수동 삭제 시: 남은 이용권에 맞게 가장 마지막 날짜 뒤로 1회 연장 자동 생성 */
     function deleteLesson(lessonId) {
         const lesson = lessons.find(l => l.id === lessonId);
         if(!lesson) return;
@@ -670,12 +723,10 @@
         if(confirm(`${lesson.dateStr} ${lesson.hour}:00 ${lesson.memberName} 회원님의 수업을 취소/삭제하시겠습니까?\n(횟수는 유지되며, 가장 마지막 고정 수업일 다음 주 동일 요일에 1회 수업이 자동 연장 추가됩니다.)`)) {
             const member = members.find(m => m.id === lesson.memberId);
             
-            // 이미 출석/결석(차감)되었던 수업을 삭제하는 경우에는 차감되었던 횟수 복구
             if((lesson.status === '출석' || lesson.status === '결석(차감)') && member) {
                 member.remaining++;
             }
 
-            // 해당 회원의 전체 수업 목록 중 가장 마지막 레슨 찾기
             let mLessons = lessons.filter(l => l.memberId === lesson.memberId && !l.isTrial);
             mLessons.sort((a,b) => (a.dateStr + a.hour).localeCompare(b.dateStr + b.hour));
             
@@ -690,7 +741,6 @@
                 lastEquipment = lastLesson.equipment;
             }
 
-            // 가장 마지막 레슨 날짜로부터 7일 뒤(다음 주 동일 요일)에 1회 레슨 자동 추가
             lastDateObj.setDate(lastDateObj.getDate() + 7);
             const newDateStr = lastDateObj.toISOString().split('T')[0];
 
@@ -705,7 +755,6 @@
                 equipment: lastEquipment
             });
 
-            // 현재 선택한 스케줄 삭제
             lessons = lessons.filter(l => l.id !== lessonId);
             
             saveData();
