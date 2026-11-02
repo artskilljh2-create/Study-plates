@@ -88,7 +88,7 @@
         .sync-summary { font-size:12px; color:#6c6c70; background:#f8f9fa; border-radius:8px; padding:10px; margin-bottom:10px; line-height:1.5; }
 
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); z-index: 1000; justify-content: center; align-items: center; }
-        .modal-content { background: #fff; width: 90%; max-width: 450px; border-radius: 16px; padding: 20px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
+        .modal-content { background: #fff; width: 90%; max-width: 450px; border-radius: 16px; padding: 20px; box-shadow: 0 4px 16px rgba(0,0,0,0.2); max-height: 90vh; overflow-y: auto; }
         .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid #e5e5ea; padding-bottom: 10px; }
         .modal-header h3 { margin: 0; font-size: 17px; color: #1c1c1e; }
         .close-btn { background: none; border: none; font-size: 20px; color: #8e8e93; cursor: pointer; font-weight: bold; }
@@ -186,7 +186,7 @@
                 <label>고정 요일 선택 (복수 선택 가능) *</label>
                 <div class="days-selector" id="create-days-selector">
                     <div class="day-btn" onclick="toggleDay(this, 1)">월</div>
-                    <div class="day-btn selected" onclick="toggleDay(this, 2)">화</div>
+                    <div class="day-btn" onclick="toggleDay(this, 2)">화</div>
                     <div class="day-btn" onclick="toggleDay(this, 3)">수</div>
                     <div class="day-btn selected" onclick="toggleDay(this, 4)">목</div>
                     <div class="day-btn" onclick="toggleDay(this, 5)">금</div>
@@ -194,25 +194,15 @@
                 </div>
             </div>
 
+            <!-- 요일별 시간 설정 동적 컨테이너 -->
             <div class="form-group">
-                <label>시작 일자 *</label>
-                <input type="date" id="auto-startdate">
+                <label>요일별 수업 시간 설정 *</label>
+                <div id="auto-day-times-container" style="background:#f8f9fa; padding:10px; border-radius:8px; border:1px solid #e5e5ea;"></div>
             </div>
 
             <div class="form-group">
-                <label>수업 시간 *</label>
-                <select id="auto-hour">
-                    <option value="9">오전 09:00</option>
-                    <option value="10" selected>오전 10:00</option>
-                    <option value="11">오전 11:00</option>
-                    <option value="12">오전 12:00</option>
-                    <option value="13">오후 01:00</option>
-                    <option value="14">오후 02:00</option>
-                    <option value="15">오후 03:00</option>
-                    <option value="19">오후 07:00</option>
-                    <option value="20">오후 08:00</option>
-                    <option value="21">오후 09:00</option>
-                </select>
+                <label>시작 일자 *</label>
+                <input type="date" id="auto-startdate">
             </div>
 
             <div class="form-group">
@@ -435,19 +425,8 @@
         </div>
 
         <div class="form-group">
-            <label>수업 시간 *</label>
-            <select id="edit-rule-hour">
-                <option value="9">오전 09:00</option>
-                <option value="10">오전 10:00</option>
-                <option value="11">오전 11:00</option>
-                <option value="12">오전 12:00</option>
-                <option value="13">오후 01:00</option>
-                <option value="14">오후 02:00</option>
-                <option value="15">오후 03:00</option>
-                <option value="19">오후 07:00</option>
-                <option value="20">오후 08:00</option>
-                <option value="21">오후 09:00</option>
-            </select>
+            <label>요일별 수업 시간 설정 *</label>
+            <div id="edit-rule-day-times-container" style="background:#f8f9fa; padding:10px; border-radius:8px; border:1px solid #e5e5ea;"></div>
         </div>
 
         <div class="form-group">
@@ -471,8 +450,10 @@
     let lessons = JSON.parse(localStorage.getItem('pilates_lessons')) || [];
     let fixedRules = JSON.parse(localStorage.getItem('pilates_fixed_rules')) || [];
 
-    let selectedDays = [2, 4];
+    let selectedDays = [4]; // 기본 목요일
+    let dayTimes = { 4: 10 }; // 요일별 시간 매핑 (예: 4번 요일은 10시)
     let editSelectedDays = [];
+    let editDayTimes = {};
     let currentViewMode = 'day';
 
     let touchStartX = 0;
@@ -483,13 +464,10 @@
     document.getElementById('schedule-date').value = localDateStr(new Date());
     document.getElementById('auto-startdate').value = localDateStr(new Date());
 
-    // YYYY-MM-DD를 현지 날짜 기준으로 처리해 시간대 때문에 하루 밀리는 문제를 방지합니다.
     function localDateStr(date) {
         return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
     }
 
-    // 대한민국 공휴일 목록: 매년 바뀌는 음력 공휴일은 연도별 날짜를 포함합니다.
-    // 새해가 되면 해당 연도의 음력/대체공휴일을 추가해 주세요.
     const HOLIDAYS = {
         '2025-01-01':'신정','2025-01-28':'설날 연휴','2025-01-29':'설날','2025-01-30':'설날 연휴',
         '2025-03-01':'삼일절','2025-03-03':'삼일절 대체공휴일','2025-05-05':'어린이날·부처님오신날','2025-05-06':'대체공휴일',
@@ -509,7 +487,6 @@
     }
 
     function saveData() {
-        // 기존에 저장된 데이터도 새 필드가 없더라도 그대로 유지되도록 기본값만 보완합니다.
         members.forEach(m => {
             if (typeof m.total !== 'number') m.total = parseInt(m.total) || 0;
             if (typeof m.remaining !== 'number') m.remaining = parseInt(m.remaining) || 0;
@@ -519,7 +496,11 @@
         });
         fixedRules.forEach(r => {
             if (!Array.isArray(r.days)) r.days = [];
-            if (typeof r.hour !== 'number') r.hour = parseInt(r.hour) || 10;
+            if (!r.dayTimes || typeof r.dayTimes !== 'object') {
+                // 기존 단일 시간 구조 호환 변환
+                r.dayTimes = {};
+                r.days.forEach(d => { r.dayTimes[d] = r.hour || 10; });
+            }
             if (!r.equipment) r.equipment = '리포머/타워';
         });
         recalculateLessonIndexes();
@@ -543,9 +524,10 @@
         const member = members.find(m => m.id === memberId);
         if (!member) return 0;
         const rule = fixedRules.find(r => r.memberId === memberId);
-        const targetDays = rule && Array.isArray(rule.days) && rule.days.length ? rule.days : [2, 4];
-        const hour = rule ? Number(rule.hour) || 10 : 10;
+        const targetDays = rule && Array.isArray(rule.days) && rule.days.length ? rule.days : [4];
+        const dayTimesMap = rule && rule.dayTimes ? rule.dayTimes : { 4: 10 };
         const equipment = rule ? rule.equipment : '리포머/타워';
+        
         const memberLessons = lessons.filter(l => l.memberId === memberId && !l.isTrial);
         let currentPointerDate = new Date();
         if (memberLessons.length) {
@@ -560,7 +542,11 @@
             currentPointerDate.setDate(currentPointerDate.getDate() + 1);
             const dayNum = currentPointerDate.getDay();
             const dateStr = localDateStr(currentPointerDate);
-            if (!targetDays.includes(dayNum) || isHoliday(dateStr) || isDuplicateLesson(memberId, dateStr, hour)) continue;
+            if (!targetDays.includes(dayNum) || isHoliday(dateStr)) continue;
+            
+            const hour = Number(dayTimesMap[dayNum]) || 10;
+            if (isDuplicateLesson(memberId, dateStr, hour)) continue;
+
             lessons.push({
                 id: Date.now().toString() + Math.random().toString(36).slice(2),
                 isTrial: false, memberId, memberName: member.name, dateStr,
@@ -575,14 +561,12 @@
         let addedTotalCount = 0;
         let memberCount = 0;
 
-        // 기존 고정 규칙이 있는 회원을 우선 동기화
         members.forEach(member => {
             const rule = fixedRules.find(r => r.memberId === member.id);
             if (rule) {
                 rule.memberName = member.name;
                 memberCount++;
             }
-
             const added = syncMemberSchedule(member.id);
             addedTotalCount += added;
         });
@@ -617,6 +601,7 @@
             document.querySelectorAll('.tab-btn')[2].classList.add('active');
             document.getElementById('tab-auto-schedule').style.display = 'block';
             populateMemberDropdown('auto-member-select');
+            renderDayTimesInputs('create-days-selector', 'auto-day-times-container', selectedDays, dayTimes);
             renderFixedSchedules();
         } else if(tab === 'backup') {
             document.querySelectorAll('.tab-btn')[3].classList.add('active');
@@ -650,22 +635,82 @@
         renderSchedule();
     }
 
+    /* 요일별 시간 선택 UI 동적 렌더링 함수 */
+    const dayNamesMap = { 0: '일', 1: '월', 2: '화', 3: '수', 4: '목', 5: '금', 6: '토' };
+    
+    function renderDayTimesInputs(selectorId, containerId, daysArray, timesObj) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        container.innerHTML = '';
+
+        if (daysArray.length === 0) {
+            container.innerHTML = '<div style="font-size:12px; color:#8e8e93; text-align:center; padding:6px;">고정 요일을 먼저 선택해 주세요.</div>';
+            return;
+        }
+
+        const hoursOptions = [9, 10, 11, 12, 13, 14, 15, 19, 20, 21].map(h => 
+            `<option value="${h}" ${Number(timesObj[daysValueKey(daysArray, daysArray.indexOf(d) >= 0 ? d : daysArray[0])] || timesObj[d] || 10) === h ? 'selected' : ''}>${h < 12 ? '오전 ' + String(h).padStart(2,'0') + ':00' : '오후 ' + String(h-12 === 0 ? 12 : h-12).padStart(2,'0') + ':00'}</option>`
+        ).join('');
+
+        // 각 요일별 시간 선택 행 생성
+        daysArray.sort((a,b) => a - b).forEach(d => {
+            if (timesObj[d] === undefined) timesObj[d] = 10; // 기본 10시
+            const currentH = timesObj[d];
+            
+            const row = document.createElement('div');
+            row.style.cssText = "display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid #e5e5ea;";
+            row.innerHTML = `
+                <span style="font-size:13px; font-weight:bold; color:#007aff;">📅 ${dayNamesMap[d]}요일 수업 시간</span>
+                <select style="width:140px; padding:6px; border:1px solid #c7c7cc; border-radius:6px; font-size:13px;" onchange="updateDayTime('${containerId}', ${d}, this.value)">
+                    <option value="9" ${currentH==9?'selected':''}>오전 09:00</option>
+                    <option value="10" ${currentH==10?'selected':''}>오전 10:00</option>
+                    <option value="11" ${currentH==11?'selected':''}>오전 11:00</option>
+                    <option value="12" ${currentH==12?'selected':''}>오전 12:00</option>
+                    <option value="13" ${currentH==13?'selected':''}>오후 01:00</option>
+                    <option value="14" ${currentH==14?'selected':''}>오후 02:00</option>
+                    <option value="15" ${currentH==15?'selected':''}>오후 03:00</option>
+                    <option value="19" ${currentH==19?'selected':''}>오후 07:00</option>
+                    <option value="20" ${currentH==20?'selected':''}>오후 08:00</option>
+                    <option value="21" ${currentH==21?'selected':''}>오후 09:00</option>
+                </select>
+            `;
+            container.appendChild(row);
+        });
+    }
+
+    function daysValueKey(arr, val) { return val; }
+
+    function updateDayTime(containerId, dayIndex, val) {
+        const timeVal = parseInt(val);
+        if (containerId === 'auto-day-times-container') {
+            dayTimes[dayIndex] = timeVal;
+        } else if (containerId === 'edit-rule-day-times-container') {
+            editDayTimes[dayIndex] = timeVal;
+        }
+    }
+
     function toggleDay(el, dayIndex) {
         el.classList.toggle('selected');
         if(selectedDays.includes(dayIndex)) {
             selectedDays = selectedDays.filter(d => d !== dayIndex);
+            delete dayTimes[dayIndex];
         } else {
             selectedDays.push(dayIndex);
+            dayTimes[dayIndex] = 10; // 기본 10시
         }
+        renderDayTimesInputs('create-days-selector', 'auto-day-times-container', selectedDays, dayTimes);
     }
 
     function toggleEditDay(el, dayIndex) {
         el.classList.toggle('selected');
         if(editSelectedDays.includes(dayIndex)) {
             editSelectedDays = editSelectedDays.filter(d => d !== dayIndex);
+            delete editDayTimes[dayIndex];
         } else {
             editSelectedDays.push(dayIndex);
+            if (editDayTimes[dayIndex] === undefined) editDayTimes[dayIndex] = 10;
         }
+        renderDayTimesInputs('edit-rule-days-selector', 'edit-rule-day-times-container', editSelectedDays, editDayTimes);
     }
 
     function openAddModal() {
@@ -924,7 +969,6 @@
         member.total = (parseInt(member.total) || 0) + amount;
         member.remaining = (parseInt(member.remaining) || 0) + amount;
 
-        // 새 이용권이 추가되면 부족한 미래 고정수업을 자동으로 생성합니다.
         const added = syncMemberSchedule(member.id);
 
         saveData();
@@ -952,8 +996,6 @@
         return extendFixedSchedulesForMember(memberId, missingCount);
     }
 
-    // 현재 생성된 수업에서 회원별 고정 요일/시간 패턴을 추정해 fixedRules에 반영합니다.
-    // 기존 fixedRules가 있는 회원은 기존 설정을 우선 보존합니다.
     function syncFixedRulesFromLessons() {
         let createdRules = 0;
         let updatedRules = 0;
@@ -968,10 +1010,14 @@
             let rule = fixedRules.find(r => r.memberId === member.id);
 
             if (rule) {
-                // 회원 이름 등 변경된 기본 정보만 동기화
                 rule.memberName = member.name;
                 if (!Array.isArray(rule.days) || rule.days.length === 0) {
                     rule.days = [...new Set(memberLessons.map(l => new Date(l.dateStr).getDay()))];
+                    rule.dayTimes = {};
+                    rule.days.forEach(d => {
+                        const matching = memberLessons.find(l => new Date(l.dateStr).getDay() === d);
+                        rule.dayTimes[d] = matching ? matching.hour : 10;
+                    });
                     updatedRules++;
                 }
                 return;
@@ -979,17 +1025,13 @@
 
             const futureLessons = memberLessons.filter(l => l.status === '수업예정');
             const sourceLessons = futureLessons.length ? futureLessons : memberLessons;
-            const dayCounts = {};
-            sourceLessons.forEach(l => {
-                const d = new Date(l.dateStr).getDay();
-                dayCounts[d] = (dayCounts[d] || 0) + 1;
+            
+            const daysSet = [...new Set(sourceLessons.map(l => new Date(l.dateStr).getDay()))].sort();
+            const dayTimesMap = {};
+            daysSet.forEach(d => {
+                const match = sourceLessons.find(l => new Date(l.dateStr).getDay() === d);
+                dayTimesMap[d] = match ? match.hour : 10;
             });
-
-            const maxCount = Math.max(...Object.values(dayCounts));
-            const inferredDays = Object.keys(dayCounts)
-                .filter(d => dayCounts[d] === maxCount)
-                .map(Number)
-                .sort((a,b) => a-b);
 
             const first = sourceLessons[0];
 
@@ -997,8 +1039,8 @@
                 id: Date.now().toString() + Math.random().toString(),
                 memberId: member.id,
                 memberName: member.name,
-                days: inferredDays.length ? inferredDays : [new Date(first.dateStr).getDay()],
-                hour: parseInt(first.hour) || 10,
+                days: daysSet,
+                dayTimes: dayTimesMap,
                 equipment: first.equipment || '리포머/타워',
                 startDate: first.dateStr
             });
@@ -1030,7 +1072,6 @@
         }
     }
 
-    /* 기존 회원 목록 렌더링 (가나다순 정렬 & 이름 검색) */
     function renderMembers() {
         const div = document.getElementById('member-list');
         const searchText = (document.getElementById('member-search-input')?.value || '').trim().toLowerCase();
@@ -1074,7 +1115,6 @@
         });
     }
 
-    /* 회원 정보 및 이용권 종합 수정 모달 열기 */
     function openEditMemberModal(memberId) {
         const member = members.find(m => m.id === memberId);
         if(!member) return;
@@ -1094,7 +1134,6 @@
         document.getElementById('edit-member-modal').style.display = 'none';
     }
 
-    /* 회원 정보 수정 저장 */
     function saveEditMemberModal() {
         const memberId = document.getElementById('edit-member-id').value;
         const member = members.find(m => m.id === memberId);
@@ -1114,7 +1153,6 @@
         member.total = parseInt(document.getElementById('edit-m-total').value) || 0;
         member.note = document.getElementById('edit-m-note').value.trim() || '특이사항 없음';
 
-        // 스케줄표 및 고정 스케줄 목록 내 회원 이름도 동기화
         if (oldName !== newName) {
             lessons.forEach(l => {
                 if (l.memberId === memberId) l.memberName = newName;
@@ -1148,7 +1186,6 @@
         const memberId = document.getElementById('auto-member-select').value;
         const count = parseInt(document.getElementById('auto-count').value);
         const startDateVal = document.getElementById('auto-startdate').value;
-        const hour = parseInt(document.getElementById('auto-hour').value);
         const equipment = document.getElementById('auto-equipment').value;
 
         const member = members.find(m => m.id === memberId);
@@ -1164,7 +1201,7 @@
             memberId: member.id,
             memberName: member.name,
             days: [...selectedDays],
-            hour: hour,
+            dayTimes: { ...dayTimes },
             equipment: equipment,
             startDate: startDateVal
         });
@@ -1176,22 +1213,23 @@
             guard++;
             const day = currentDate.getDay();
             const dateStr = localDateStr(currentDate);
-            if(selectedDays.includes(day) && !isHoliday(dateStr) && !isDuplicateLesson(member.id, dateStr, hour)) {
-                lessons.push({
-                    id: Date.now().toString() + Math.random().toString(36).slice(2),
-                    isTrial: false, memberId: member.id, memberName: member.name,
-                    dateStr, hour, status: '수업예정', equipment, scheduleSource: 'fixed'
-                });
-                createdCount++;
+            if(selectedDays.includes(day) && !isHoliday(dateStr)) {
+                const hour = Number(dayTimes[day]) || 10;
+                if (!isDuplicateLesson(member.id, dateStr, hour)) {
+                    lessons.push({
+                        id: Date.now().toString() + Math.random().toString(36).slice(2),
+                        isTrial: false, memberId: member.id, memberName: member.name,
+                        dateStr, hour, status: '수업예정', equipment, scheduleSource: 'fixed'
+                    });
+                    createdCount++;
+                }
             }
             currentDate.setDate(currentDate.getDate() + 1);
         }
 
         saveData();
         renderFixedSchedules();
-        alert(`${member.name} 회원님의 고정 요일 규칙이 저장되었습니다.
-공휴일과 중복 수업을 제외하고 ${createdCount}회 스케줄을 생성했습니다.`);
-        renderFixedSchedules();
+        alert(`${member.name} 회원님의 고정 요일 및 요일별 시간 규칙이 저장되었습니다.\n공휴일과 중복 수업을 제외하고 ${createdCount}회 스케줄을 생성했습니다.`);
         switchTab('schedule');
     }
 
@@ -1213,11 +1251,12 @@
             return;
         }
 
-        const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
         let sortedRules = [...fixedRules].sort((a,b) => a.memberName.localeCompare(b.memberName, 'ko-KR'));
 
         sortedRules.forEach(rule => {
-            const dayTextStr = rule.days.map(d => dayNames[d]).join(', ');
+            const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+            const dayTimesMap = rule.dayTimes || {};
+            const dayDetailsStr = rule.days.map(d => `${dayNames[d]}요일(${dayTimesMap[d] || 10}:00)`).join(', ');
             const member = members.find(m => m.id === rule.memberId);
 
             const memberLessons = lessons
@@ -1230,7 +1269,7 @@
             const lessonRows = previewLessons.length
                 ? previewLessons.map(l => `
                     <div class="fixed-member-lesson-row">
-                        <span>📅 ${l.dateStr} (${dayNames[new Date(l.dateStr).getDay()]}) ${String(l.hour).padStart(2,'0')}:00</span>
+                        <span>📅 ${l.dateStr} (${dayNames[new Date(l.dateStr).getDay()]}요일) ${String(l.hour).padStart(2,'0')}:00</span>
                         <span>${l.equipment || '기본'}</span>
                     </div>
                 `).join('')
@@ -1244,8 +1283,8 @@
                     </div>
 
                     <div style="font-size:13px; color:#3a3a3c; margin-top:6px; line-height:1.4;">
-                        🗓️ <b>고정 요일:</b> 매주 <span style="color:#007aff; font-weight:bold;">[${dayTextStr}]</span><br>
-                        ⏰ <b>수업 시간:</b> ${rule.hour}:00 | 🧘 <b>기구:</b> ${rule.equipment}
+                        🗓️ <b>요일별 고정 시간:</b> <span style="color:#007aff; font-weight:bold;">${dayDetailsStr}</span><br>
+                        🧘 <b>기구:</b> ${rule.equipment}
                     </div>
 
                     <div class="fixed-member-lessons" onclick="event.stopPropagation();">
@@ -1269,13 +1308,19 @@
 
         document.getElementById('edit-rule-member-id').value = memberId;
         document.getElementById('edit-rule-title').innerText = `✏️ ${rule.memberName} 회원님 고정 스케줄 수정`;
-        document.getElementById('edit-rule-hour').value = rule.hour;
         document.getElementById('edit-rule-equipment').value = rule.equipment;
 
         editSelectedDays = [...rule.days];
+        editDayTimes = rule.dayTimes ? { ...rule.dayTimes } : {};
+        
+        // 빠진 요일별 시간이 있다면 기본 10시 세팅
+        editSelectedDays.forEach(d => {
+            if (editDayTimes[d] === undefined) editDayTimes[d] = 10;
+        });
+
         const dayBtns = document.querySelectorAll('#edit-rule-days-selector .day-btn');
         dayBtns.forEach((btn, index) => {
-            const dayVal = index + 1;
+            const dayVal = index + 1; // 1: 월 ~ 6: 토, 0: 일
             if (editSelectedDays.includes(dayVal)) {
                 btn.classList.add('selected');
             } else {
@@ -1283,6 +1328,7 @@
             }
         });
 
+        renderDayTimesInputs('edit-rule-days-selector', 'edit-rule-day-times-container', editSelectedDays, editDayTimes);
         document.getElementById('edit-rule-modal').style.display = 'flex';
     }
 
@@ -1302,16 +1348,13 @@
             return;
         }
 
-        const newHour = parseInt(document.getElementById('edit-rule-hour').value);
         const newEquipment = document.getElementById('edit-rule-equipment').value;
 
         rule.days = [...editSelectedDays];
-        rule.hour = newHour;
+        rule.dayTimes = { ...editDayTimes };
         rule.equipment = newEquipment;
 
         let todayStr = localDateStr(new Date());
-        // 출석/결석 처리된 과거 이력은 절대 건드리지 않고,
-        // 오늘 이후 '수업예정'만 새 고정 패턴으로 재생성합니다.
         lessons = lessons.filter(l => !(l.memberId === memberId && l.status === '수업예정' && l.dateStr >= todayStr));
 
         let scheduledLessons = lessons.filter(l => l.memberId === memberId && l.status === '수업예정');
@@ -1359,7 +1402,7 @@
             return;
         }
 
-        if(confirm(`${lesson.dateStr} ${lesson.hour}:00 ${lesson.memberName} 회원님의 수업을 취소/삭제하시겠습니까?\n(횟수는 유지되며, 회원의 고정 요일 순서(화·목 등)에 맞게 1회 수업이 자동 연장 추가됩니다.)`)) {
+        if(confirm(`${lesson.dateStr} ${lesson.hour}:00 ${lesson.memberName} 회원님의 수업을 취소/삭제하시겠습니까?\n(횟수는 유지되며, 회원의 고정 요일 순서에 맞게 1회 수업이 자동 연장 추가됩니다.)`)) {
             const member = members.find(m => m.id === lesson.memberId);
             
             if((lesson.status === '출석' || lesson.status === '결석(차감)') && member) {
@@ -1722,7 +1765,6 @@
         renderSchedule();
     }
 
-    // 앱 실행 시 기존 데이터를 새 구조에 맞게 보완합니다. 기존 회원/수업 데이터는 삭제하지 않습니다.
     saveData();
     renderSchedule();
 </script>
